@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Crying Words - 宝宝哭声翻译器</title>
+    <title>Crying Words - Baby Cry Translator</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,18 +12,29 @@
             background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 50%, #e8eaf6 100%);
             min-height: 100vh; display: flex; flex-direction: column; align-items: center; overflow-x: hidden;
         }
+
+        /* Language Toggle */
+        .lang-toggle {
+            position: fixed; top: 12px; right: 12px; z-index: 200;
+            display: flex; border-radius: 20px; overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1); border: 1px solid #e0d6eb;
+        }
+        .lang-btn {
+            padding: 6px 14px; font-size: 13px; font-weight: 600; border: none; cursor: pointer;
+            transition: all 0.2s; background: white; color: #7e57c2;
+        }
+        .lang-btn.active { background: #7e57c2; color: white; }
+        .lang-btn:hover:not(.active) { background: #f3e5f5; }
+
         .header { text-align: center; padding: 40px 20px 10px; }
         .header h1 { font-size: 28px; color: #6a1b9a; margin-bottom: 4px; letter-spacing: 1px; }
         .header p { font-size: 14px; color: #9575cd; }
         .baby-icon { font-size: 60px; margin-bottom: 10px; }
         .header .powered { font-size: 11px; color: #b39ddb; margin-top: 4px; }
-
         .main-container {
             width: 100%; max-width: 420px; padding: 0 20px; flex: 1;
             display: flex; flex-direction: column; align-items: center;
         }
-
-        /* Model loading */
         .model-status {
             width: 100%; padding: 12px 16px; border-radius: 14px; margin: 12px 0;
             font-size: 13px; text-align: center; transition: all 0.3s;
@@ -31,8 +42,6 @@
         .model-status.loading { background: #fff3e0; color: #e65100; }
         .model-status.ready { background: #e8f5e9; color: #2e7d32; }
         .model-status.hidden { display: none; }
-
-        /* Visualizer */
         .viz-wrapper { width: 100%; margin: 12px 0; }
         .viz-tabs { display: flex; gap: 8px; margin-bottom: 8px; padding-left: 4px; }
         .viz-tab {
@@ -52,8 +61,6 @@
             color: #b39ddb; font-size: 14px; pointer-events: none; transition: opacity 0.3s;
         }
         .visualizer-label.hidden { opacity: 0; }
-
-        /* Record Button */
         .record-section { display: flex; flex-direction: column; align-items: center; margin: 16px 0; }
         .record-btn {
             width: 120px; height: 120px; border-radius: 50%; border: none;
@@ -68,7 +75,6 @@
         .record-btn.analyzing { background: linear-gradient(135deg, #7c4dff, #536dfe); animation: glow 2s infinite; pointer-events: none; }
         .record-btn .mic-icon { font-size: 36px; }
         .record-btn .btn-text { font-size: 13px; }
-
         @keyframes pulse {
             0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.6); }
             70% { box-shadow: 0 0 0 30px rgba(244,67,54,0); }
@@ -79,11 +85,8 @@
             50% { box-shadow: 0 0 40px rgba(83,109,254,0.8); }
             100% { box-shadow: 0 0 20px rgba(124,77,255,0.6); }
         }
-
         .timer { margin-top: 12px; font-size: 24px; font-weight: 300; color: #6a1b9a; font-variant-numeric: tabular-nums; }
         .hint { margin-top: 6px; font-size: 13px; color: #9575cd; text-align: center; }
-
-        /* Analysis Progress */
         .analysis-progress {
             width: 100%; background: white; border-radius: 20px; padding: 20px;
             margin: 16px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.06); display: none;
@@ -103,15 +106,12 @@
         }
         .progress-step.active .step-icon { background: #ede7f6; }
         .progress-step.done .step-icon { background: #e8f5e9; }
-
-        /* Results */
         .result-card {
             width: 100%; background: white; border-radius: 24px; padding: 24px; margin: 16px 0;
             box-shadow: 0 10px 40px rgba(0,0,0,0.08); display: none; animation: slideUp 0.5s ease;
         }
         .result-card.show { display: block; }
         @keyframes slideUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
-
         .result-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
         .result-emoji {
             font-size: 50px; width: 70px; height: 70px;
@@ -121,26 +121,21 @@
         .result-title { flex: 1; }
         .result-title h2 { font-size: 22px; color: #333; margin-bottom: 4px; }
         .result-title .confidence { font-size: 13px; color: #9575cd; }
-
         .confidence-bar { width:100%; height:6px; background:#f3e5f5; border-radius:3px; margin:8px 0 16px; overflow:hidden; }
         .confidence-fill { height:100%; background:linear-gradient(90deg,#e91e63,#9c27b0); border-radius:3px; transition:width 1s ease; }
-
         .result-description { font-size: 15px; line-height: 1.7; color: #555; margin-bottom: 16px; }
-
         .dunstan-tag {
             display: inline-flex; align-items: center; gap: 6px;
             background: linear-gradient(135deg, #ede7f6, #e8eaf6);
             padding: 8px 14px; border-radius: 12px; font-size: 13px; color: #5c6bc0; margin-bottom: 16px;
         }
         .dunstan-tag .sound { font-weight: 700; font-size: 15px; color: #3949ab; }
-
         .nn-tag {
             display: inline-flex; align-items: center; gap: 6px;
             background: linear-gradient(135deg, #e8f5e9, #e0f2f1);
             padding: 8px 14px; border-radius: 12px; font-size: 13px; color: #00897b; margin-bottom: 16px;
             margin-left: 6px;
         }
-
         .features-section { background: #fafafa; border-radius: 16px; padding: 16px; margin-bottom: 16px; }
         .features-section h4 { font-size: 13px; color: #9575cd; margin-bottom: 12px; }
         .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -148,15 +143,13 @@
         .feature-item .f-label { font-size: 11px; color: #aaa; margin-bottom: 4px; }
         .feature-item .f-value { font-size: 16px; font-weight: 600; color: #6a1b9a; }
         .feature-item .f-unit { font-size: 10px; color: #b39ddb; }
-
         .scores-section { margin-bottom: 16px; }
         .scores-section h4 { font-size: 13px; color: #9575cd; margin-bottom: 10px; }
         .score-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-        .score-label { width: 60px; text-align: right; color: #888; flex-shrink: 0; }
+        .score-label { width: 70px; text-align: right; color: #888; flex-shrink: 0; }
         .score-bar-bg { flex:1; height:8px; background:#f3e5f5; border-radius:4px; overflow:hidden; }
         .score-bar-fill { height:100%; border-radius:4px; transition: width 0.8s ease; }
-        .score-val { width: 32px; color: #888; flex-shrink: 0; }
-
+        .score-val { width: 38px; color: #888; flex-shrink: 0; }
         .tips-section h3 { font-size:16px; color:#6a1b9a; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
         .tip-item {
             display:flex; align-items:flex-start; gap:10px; padding:12px;
@@ -169,7 +162,6 @@
             display:flex; align-items:center; justify-content:center;
             font-size:12px; font-weight:600; flex-shrink:0;
         }
-
         .history-section { width: 100%; margin-bottom: 20px; }
         .history-title { font-size:16px; color:#6a1b9a; margin-bottom:12px; padding-left:4px; }
         .history-item {
@@ -180,7 +172,6 @@
         .history-item .h-info { flex: 1; }
         .history-item .h-reason { font-size:14px; font-weight:600; color:#333; }
         .history-item .h-time { font-size:12px; color:#aaa; margin-top:2px; }
-
         .toast {
             position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(100px);
             background:#333; color:white; padding:12px 24px; border-radius:12px;
@@ -191,53 +182,58 @@
     </style>
 </head>
 <body>
+    <div class="lang-toggle">
+        <button class="lang-btn active" id="langEn" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" id="langZh" onclick="setLang('zh')">中文</button>
+    </div>
+
     <div class="header">
         <div class="baby-icon">👶</div>
         <h1>Crying Words</h1>
-        <p>宝宝哭声翻译器 · 新手妈妈的小帮手</p>
-        <div class="powered">TensorFlow.js 神经网络 + MFCC + Dunstan 婴儿语言</div>
+        <p id="subtitle">Baby Cry Translator &middot; A Helper for New Parents</p>
+        <div class="powered" id="poweredBy">TensorFlow.js Neural Network + MFCC + Dunstan Baby Language</div>
     </div>
 
     <div class="main-container">
-        <div class="model-status loading" id="modelStatus">🧠 正在初始化神经网络模型...</div>
+        <div class="model-status loading" id="modelStatus"></div>
 
         <div class="viz-wrapper">
             <div class="viz-tabs">
-                <button class="viz-tab active" onclick="switchViz('wave')">波形</button>
-                <button class="viz-tab" onclick="switchViz('freq')">频谱</button>
+                <button class="viz-tab active" id="tabWave" onclick="switchViz('wave')">Waveform</button>
+                <button class="viz-tab" id="tabFreq" onclick="switchViz('freq')">Spectrum</button>
             </div>
             <div class="visualizer-container">
                 <canvas id="visualizer"></canvas>
                 <canvas id="spectrogram"></canvas>
-                <div class="visualizer-label" id="vizLabel">声音波形将在这里显示</div>
+                <div class="visualizer-label" id="vizLabel"></div>
             </div>
         </div>
 
         <div class="record-section">
             <button class="record-btn" id="recordBtn" onclick="toggleRecording()" disabled>
                 <span class="mic-icon">🎙️</span>
-                <span class="btn-text">加载中...</span>
+                <span class="btn-text" id="btnText"></span>
             </button>
             <div class="timer" id="timer">00:00</div>
-            <div class="hint" id="hint">模型加载完成后即可开始录音</div>
+            <div class="hint" id="hint"></div>
         </div>
 
         <div class="analysis-progress" id="analysisProgress">
-            <h3>🔬 正在分析哭声...</h3>
-            <div class="progress-step" id="step1"><span class="step-icon">1</span> 提取音频波形数据</div>
-            <div class="progress-step" id="step2"><span class="step-icon">2</span> 计算MFCC梅尔频率特征 (13维)</div>
-            <div class="progress-step" id="step3"><span class="step-icon">3</span> 频谱质心与能量分析</div>
-            <div class="progress-step" id="step4"><span class="step-icon">4</span> 自相关基频检测 (F0)</div>
-            <div class="progress-step" id="step5"><span class="step-icon">5</span> Dunstan婴儿语言模式匹配</div>
-            <div class="progress-step" id="step6"><span class="step-icon">6</span> 神经网络推理分类</div>
+            <h3 id="analysisTitle"></h3>
+            <div class="progress-step" id="step1"><span class="step-icon">1</span> <span id="step1Text"></span></div>
+            <div class="progress-step" id="step2"><span class="step-icon">2</span> <span id="step2Text"></span></div>
+            <div class="progress-step" id="step3"><span class="step-icon">3</span> <span id="step3Text"></span></div>
+            <div class="progress-step" id="step4"><span class="step-icon">4</span> <span id="step4Text"></span></div>
+            <div class="progress-step" id="step5"><span class="step-icon">5</span> <span id="step5Text"></span></div>
+            <div class="progress-step" id="step6"><span class="step-icon">6</span> <span id="step6Text"></span></div>
         </div>
 
         <div class="result-card" id="resultCard">
             <div class="result-header">
                 <div class="result-emoji" id="resultEmoji">😢</div>
                 <div class="result-title">
-                    <h2 id="resultReason">分析中...</h2>
-                    <div class="confidence" id="resultConfidence">置信度: --</div>
+                    <h2 id="resultReason"></h2>
+                    <div class="confidence" id="resultConfidence"></div>
                 </div>
             </div>
             <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill" style="width:0%"></div></div>
@@ -247,88 +243,273 @@
             </div>
             <div class="result-description" id="resultDesc"></div>
             <div class="features-section" id="featuresSection">
-                <h4>📊 音频特征分析</h4>
+                <h4 id="featuresTitle"></h4>
                 <div class="feature-grid" id="featureGrid"></div>
             </div>
             <div class="scores-section" id="scoresSection">
-                <h4>📈 神经网络各类别概率</h4>
+                <h4 id="scoresTitle"></h4>
                 <div id="scoresBars"></div>
             </div>
             <div class="tips-section">
-                <h3>💡 建议</h3>
+                <h3 id="tipsTitle"></h3>
                 <div id="tipsList"></div>
             </div>
         </div>
 
         <div class="history-section" id="historySection" style="display:none">
-            <div class="history-title">📋 历史记录</div>
+            <div class="history-title" id="historyTitle"></div>
             <div id="historyList"></div>
         </div>
-        <div class="disclaimer">⚠️ 本工具基于机器学习模型分析，仅供参考，不能替代专业医疗建议。<br>如宝宝持续哭闹或有异常，请及时就医。</div>
+        <div class="disclaimer" id="disclaimer"></div>
     </div>
     <div class="toast" id="toast"></div>
 
 <script>
 // ================================================================
-// MFCC Extractor (Mel-Frequency Cepstral Coefficients)
+// i18n - Internationalization
+// ================================================================
+let currentLang = 'en';
+
+const i18n = {
+    en: {
+        subtitle: 'Baby Cry Translator &middot; A Helper for New Parents',
+        poweredBy: 'TensorFlow.js Neural Network + MFCC + Dunstan Baby Language',
+        tabWave: 'Waveform', tabFreq: 'Spectrum',
+        vizLabel: 'Sound waveform will display here',
+        btnLoading: 'Loading...', btnRecord: 'Record', btnStop: 'Tap to Stop', btnAnalyzing: 'Analyzing...',
+        hintLoading: 'Model loading, please wait...',
+        hintReady: 'Hold your phone near baby, record 3-10s of crying',
+        hintRecording: 'Recording... keep the environment quiet',
+        hintAnalyzing: 'Neural network is analyzing the cry...',
+        tooShort: 'Recording too short, please record at least 3 seconds',
+        audioError: 'Audio processing error, please try again',
+        micError: 'Please allow microphone access and try again',
+
+        modelInit: '🧠 Initializing neural network model...',
+        modelGenData: '🧠 Generating training data (from research distributions)...',
+        modelBuilding: '🧠 Building neural network (3 layers, 128→64→32)...',
+        modelTraining: '🧠 Training neural network (150 epochs)...',
+        modelEpoch: (e, acc) => `🧠 Training... Epoch ${e}/150 | Accuracy: ${acc}%`,
+        modelReady: '✅ Neural network ready (3-layer FC network, 8-class classifier)',
+        modelError: '⚠️ Model failed to load, using basic analysis mode',
+
+        analysisTitle: '🔬 Analyzing cry...',
+        step1: 'Extracting audio waveform data',
+        step2: 'Computing MFCC features (13-dim)',
+        step3: 'Spectral centroid & energy analysis',
+        step4: 'Autocorrelation pitch detection (F0)',
+        step5: 'Dunstan Baby Language pattern matching',
+        step6: 'Neural network inference',
+
+        confidence: (n) => `Neural Network Confidence: ${n}%`,
+        featuresTitle: '📊 Audio Feature Analysis',
+        scoresTitle: '📈 Neural Network Class Probabilities',
+        tipsTitle: '💡 Suggestions',
+        historyTitle: '📋 History',
+        disclaimer: '⚠️ This tool is based on machine learning analysis and is for reference only. It cannot replace professional medical advice.<br>If your baby cries persistently or abnormally, please consult a doctor.',
+
+        fPitch: 'Pitch (F0)', fCentroid: 'Spectral Centroid', fRms: 'Volume (RMS)',
+        fRolloff: 'Spectral Rolloff', fRhythm: 'Rhythm Regularity', fPitchVar: 'Pitch Variation',
+
+        labels: { hungry:'Hungry', tired:'Tired', pain:'Pain', diaper:'Diaper', attention:'Cuddle', colic:'Colic', burping:'Burping', temperature:'Temp' },
+
+        cryTypes: {
+            hungry: { emoji:'🍼', reason:'Baby is Hungry',
+                description:'The neural network detected a rhythmic, repetitive cry pattern with MFCC features highly matching hunger cries. Frequency is in the 300-500Hz range with escalating energy, consistent with the Dunstan "Neh" sound.',
+                tips:['Try feeding the baby breast milk, formula, or solids (age-appropriate)','Look for rooting reflex: sucking fingers, turning head to find the nipple','Newborns typically need feeding every 2-3 hours','If breastfeeding, ensure proper latch — you should hear swallowing sounds'] },
+            tired: { emoji:'😴', reason:'Baby is Sleepy',
+                description:'The model identified a low-frequency, low-energy cry with decreasing intensity over time. Low MFCC variation indicates monotone crying, with fundamental frequency below 350Hz — a strong match for tiredness signals.',
+                tips:['Gently rock the baby in a quiet, dim environment','Play white noise to simulate the womb environment','Swaddle the baby for a sense of security','Watch wake windows: newborns ~45-60min, 3-month-olds ~1.5-2hrs'] },
+            pain: { emoji:'🤕', reason:'Baby May Be in Pain',
+                description:'Detected high-frequency (>500Hz), high-energy sustained crying. The spectral centroid is elevated and MFCC features show abnormal spectral distribution — this sudden, piercing pattern is typically associated with pain.',
+                tips:['Check the baby all over for issues (fever, rash, hair wrapped around fingers/toes)','Gently pat the back to help release gas; try "bicycle legs" movement','Check clothing for irritating tags or tight spots','If crying is persistent and unusually piercing, seek medical attention'] },
+            diaper: { emoji:'🧷', reason:'Needs a Diaper Change',
+                description:'Moderate-intensity intermittent crying detected. MFCC features indicate a non-acute discomfort pattern. Energy variation is moderate, frequency is in the mid-range — more like "fussy complaining" than severe distress.',
+                tips:['Check if the diaper is wet or soiled','Apply diaper cream after cleaning to prevent rash','Make sure the diaper fits properly — not too tight or loose','For severe diaper rash, let baby go diaper-free for a while'] },
+            attention: { emoji:'🤗', reason:'Baby Wants to Be Held',
+                description:'A clear intermittent cry pattern — crying on and off as if "testing" your response. High, irregular energy variation suggests the baby is waiting for a reaction. This is social crying, not a physiological need.',
+                tips:['Pick up the baby and let them feel your warmth and heartbeat','Talk to the baby and make eye contact','Skin-to-skin contact is great for emotional comfort','Try a change of scenery — showing baby new things can help'] },
+            colic: { emoji:'😫', reason:'Possible Colic',
+                description:'High-intensity sustained crying detected with high-frequency fluctuations, matching the Dunstan "Eairh" sound. Spectral analysis shows energy concentrated in higher frequencies, indicating the baby is straining.',
+                tips:['Try the "5 S\'s": Swaddle, Side position, Shush, Swing, Suck','Gently massage the tummy in a clockwise direction','Try the "airplane hold" (baby face-down on your forearm)','Colic usually improves after 3-4 months — take care of your own wellbeing too'] },
+            burping: { emoji:'🫧', reason:'Baby Needs to Burp',
+                description:'Short, interrupted cry bursts detected with high MFCC variation rate. The neural network identified a pattern consistent with the Dunstan "Eh" sound — a reflex caused by rising gas pressing on the vocal cords.',
+                tips:['Hold baby upright with head on your shoulder, gently pat their back','Or sit baby on your lap, support the chin, and pat the back','Burp during and after every feeding','If burping doesn\'t happen after a few minutes, try a different position'] },
+            temperature: { emoji:'🌡️', reason:'Baby May Be Too Hot or Cold',
+                description:'Persistent moderate-intensity fussy crying. Features fall between hunger and discomfort ranges. MFCC pattern doesn\'t match clear hunger or pain — closer to general physical discomfort.',
+                tips:['Feel the back of baby\'s neck and upper back to gauge temperature (cold hands/feet are normal)','Dress baby in one thin layer more than you\'re wearing','Keep room temperature between 68-78°F (20-26°C)','Watch for sweating or bluish lips'] },
+        },
+
+        dunstanLabels: { neh:'Neh (Hungry)', eh:'Eh (Burp)', owh:'Owh (Tired)', eairh:'Eairh (Gas pain)', heh:'Heh (Discomfort)' },
+    },
+
+    zh: {
+        subtitle: '宝宝哭声翻译器 · 新手妈妈的小帮手',
+        poweredBy: 'TensorFlow.js 神经网络 + MFCC + Dunstan 婴儿语言',
+        tabWave: '波形', tabFreq: '频谱',
+        vizLabel: '声音波形将在这里显示',
+        btnLoading: '加载中...', btnRecord: '点击录音', btnStop: '点击停止', btnAnalyzing: '分析中...',
+        hintLoading: '模型加载完成后即可开始录音',
+        hintReady: '请将手机靠近宝宝，录制3-10秒哭声',
+        hintRecording: '正在录音...请保持安静环境',
+        hintAnalyzing: '神经网络正在分析哭声...',
+        tooShort: '录音时间太短，请至少录制3秒',
+        audioError: '音频处理出错，请重试',
+        micError: '请允许麦克风权限后重试',
+
+        modelInit: '🧠 正在初始化神经网络模型...',
+        modelGenData: '🧠 正在生成训练数据 (基于研究论文特征分布)...',
+        modelBuilding: '🧠 正在构建神经网络 (3层, 128→64→32)...',
+        modelTraining: '🧠 正在训练神经网络 (150轮)...',
+        modelEpoch: (e, acc) => `🧠 训练中... 轮次 ${e}/150 | 准确率: ${acc}%`,
+        modelReady: '✅ 神经网络已就绪 (3层全连接网络, 8类分类)',
+        modelError: '⚠️ 模型加载失败，使用基础分析模式',
+
+        analysisTitle: '🔬 正在分析哭声...',
+        step1: '提取音频波形数据',
+        step2: '计算MFCC梅尔频率特征 (13维)',
+        step3: '频谱质心与能量分析',
+        step4: '自相关基频检测 (F0)',
+        step5: 'Dunstan婴儿语言模式匹配',
+        step6: '神经网络推理分类',
+
+        confidence: (n) => `神经网络置信度: ${n}%`,
+        featuresTitle: '📊 音频特征分析',
+        scoresTitle: '📈 神经网络各类别概率',
+        tipsTitle: '💡 建议',
+        historyTitle: '📋 历史记录',
+        disclaimer: '⚠️ 本工具基于机器学习模型分析，仅供参考，不能替代专业医疗建议。<br>如宝宝持续哭闹或有异常，请及时就医。',
+
+        fPitch: '基频 (F0)', fCentroid: '频谱质心', fRms: '音量 (RMS)',
+        fRolloff: '频谱滚降', fRhythm: '节奏规律性', fPitchVar: '音高波动',
+
+        labels: { hungry:'饿了', tired:'困了', pain:'疼痛', diaper:'尿布', attention:'抱抱', colic:'肠绞痛', burping:'拍嗝', temperature:'冷热' },
+
+        cryTypes: {
+            hungry: { emoji:'🍼', reason:'宝宝饿了',
+                description:'神经网络检测到有节奏的、重复性哭声模式，MFCC特征与饥饿哭声高度匹配。频率在300-500Hz范围，能量逐渐升高，符合"Neh"音特征。',
+                tips:['尝试给宝宝喂奶或辅食（根据月龄）','观察宝宝是否有吮吸手指、转头寻找乳头（觅食反射）','新生儿通常2-3小时需要喂一次','如果母乳喂养，确保含接正确，听到吞咽声'] },
+            tired: { emoji:'😴', reason:'宝宝困了想睡觉',
+                description:'模型识别到低频、低能量且逐渐减弱的哭声模式。MFCC变化率低，说明哭声单调，基频低于350Hz，与疲倦信号高度吻合。',
+                tips:['轻轻摇晃宝宝，营造安静昏暗的环境','播放白噪音模拟子宫环境','用襁褓包裹给予安全感','注意清醒窗口期：新生儿约45-60分钟'] },
+            pain: { emoji:'🤕', reason:'宝宝可能不舒服/疼痛',
+                description:'检测到高频率(>500Hz)、高能量的持续性哭声。频谱质心偏高，MFCC特征显示异常的频谱分布，这种突发尖锐模式通常与疼痛相关。',
+                tips:['检查全身是否有异常（发热、红疹、头发缠绕手指脚趾）','轻拍背部排气，做"蹬自行车"动作','检查衣物标签是否刺激皮肤','哭声持续且异常尖锐请及时就医'] },
+            diaper: { emoji:'🧷', reason:'需要换尿布了',
+                description:'中等强度的间歇性哭声，MFCC特征显示非急性不适模式。能量变化适中，频率在中间范围，更像是"烦躁的抱怨"而非剧烈不适。',
+                tips:['检查尿布是否湿了或脏了','清洁后涂抹护臀霜','确保尿布尺寸合适','尿布疹严重时让宝宝光屁股晾一会儿'] },
+            attention: { emoji:'🤗', reason:'宝宝想要抱抱/陪伴',
+                description:'明显的间歇性哭泣模式——哭哭停停像在"试探"反应。能量变化大且不规律，神经网络将此模式归类为社交性需求而非生理需求。',
+                tips:['抱起宝宝让他感受体温和心跳','和宝宝说话、做眼神交流','适度肌肤接触(skin-to-skin)','换个环境看新事物也有效'] },
+            colic: { emoji:'😫', reason:'宝宝可能肠绞痛',
+                description:'高强度持续性哭声，频率波动大，MFCC模式与"Eairh"音高度匹配。频谱显示能量集中在高频段，符合腹部用力发声的特征。',
+                tips:['5S安抚法：襁褓/侧躺/嘘声/摇晃/吸吮','顺时针按摩肚子帮助肠道蠕动','试试飞机抱（趴在前臂上）','通常3-4个月后好转，妈妈注意自己情绪'] },
+            burping: { emoji:'🫧', reason:'宝宝需要拍嗝',
+                description:'短促间断性哭声，MFCC变化率高。神经网络识别到与"Eh"音一致的声带模式——胃部气体上升挤压声带产生的反射声。',
+                tips:['竖抱让头靠在肩上，轻拍背部','也可坐在腿上，托下巴拍背','每次喂奶中间和之后都拍嗝','几分钟拍不出来可换姿势再试'] },
+            temperature: { emoji:'🌡️', reason:'宝宝可能太热或太冷',
+                description:'持续中等强度的烦躁哭声，特征在饥饿和不适之间。MFCC模式不符合明显的饥饿或疼痛，更接近一般性身体不适。',
+                tips:['摸后颈和背部判断冷热（手脚凉是正常的）','穿衣比大人多一层薄的即可','保持室温22-26°C','观察是否出汗或嘴唇发紫'] },
+        },
+
+        dunstanLabels: { neh:'Neh (饿了)', eh:'Eh (拍嗝)', owh:'Owh (困了)', eairh:'Eairh (胀气)', heh:'Heh (不适)' },
+    }
+};
+
+function T(key) { return i18n[currentLang][key]; }
+
+function setLang(lang) {
+    currentLang = lang;
+    document.getElementById('langEn').classList.toggle('active', lang === 'en');
+    document.getElementById('langZh').classList.toggle('active', lang === 'zh');
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = lang === 'en' ? 'Crying Words - Baby Cry Translator' : 'Crying Words - 宝宝哭声翻译器';
+    applyLang();
+    localStorage.setItem('cw-lang', lang);
+}
+
+function applyLang() {
+    document.getElementById('subtitle').innerHTML = T('subtitle');
+    document.getElementById('poweredBy').textContent = T('poweredBy');
+    document.getElementById('tabWave').textContent = T('tabWave');
+    document.getElementById('tabFreq').textContent = T('tabFreq');
+    document.getElementById('vizLabel').textContent = T('vizLabel');
+    document.getElementById('hint').textContent = modelReady ? T('hintReady') : T('hintLoading');
+    document.getElementById('analysisTitle').textContent = T('analysisTitle');
+    document.getElementById('step1Text').textContent = T('step1');
+    document.getElementById('step2Text').textContent = T('step2');
+    document.getElementById('step3Text').textContent = T('step3');
+    document.getElementById('step4Text').textContent = T('step4');
+    document.getElementById('step5Text').textContent = T('step5');
+    document.getElementById('step6Text').textContent = T('step6');
+    document.getElementById('featuresTitle').textContent = T('featuresTitle');
+    document.getElementById('scoresTitle').textContent = T('scoresTitle');
+    document.getElementById('tipsTitle').innerHTML = T('tipsTitle');
+    document.getElementById('historyTitle').textContent = T('historyTitle');
+    document.getElementById('disclaimer').innerHTML = T('disclaimer');
+
+    const btn = document.getElementById('recordBtn');
+    if (btn.classList.contains('recording')) btn.querySelector('.btn-text').textContent = T('btnStop');
+    else if (btn.classList.contains('analyzing')) btn.querySelector('.btn-text').textContent = T('btnAnalyzing');
+    else if (btn.disabled) btn.querySelector('.btn-text').textContent = T('btnLoading');
+    else btn.querySelector('.btn-text').textContent = T('btnRecord');
+
+    // Re-render last result if visible
+    if (lastResult && document.getElementById('resultCard').classList.contains('show')) {
+        showResult(lastResult.nnResult, lastResult.features, true);
+    }
+    updateHistory();
+}
+
+let modelReady = false;
+
+// ================================================================
+// MFCC Extractor
 // ================================================================
 class MFCCExtractor {
-    constructor(sr, nCoeffs = 13, nFilters = 26, fftSize = 512) {
-        this.sr = sr; this.nCoeffs = nCoeffs; this.nFilters = nFilters; this.fftSize = fftSize;
-        this.filters = this._melBank();
+    constructor(sr, nCoeffs=13, nFilters=26, fftSize=512) {
+        this.sr=sr; this.nCoeffs=nCoeffs; this.nFilters=nFilters; this.fftSize=fftSize;
+        this.filters=this._melBank();
     }
-    _hzMel(hz) { return 2595 * Math.log10(1 + hz / 700); }
-    _melHz(m) { return 700 * (10 ** (m / 2595) - 1); }
-    _melBank() {
-        const lo = this._hzMel(0), hi = this._hzMel(this.sr / 2);
-        const pts = Array.from({length: this.nFilters + 2}, (_, i) => this._melHz(lo + (hi - lo) * i / (this.nFilters + 1)));
-        const bins = pts.map(f => Math.floor((this.fftSize + 1) * f / this.sr));
-        return Array.from({length: this.nFilters}, (_, i) => {
-            const f = new Float32Array(this.fftSize / 2 + 1);
-            for (let j = bins[i]; j < bins[i+1]; j++) if (j < f.length) f[j] = (j - bins[i]) / (bins[i+1] - bins[i]);
-            for (let j = bins[i+1]; j < bins[i+2]; j++) if (j < f.length) f[j] = (bins[i+2] - j) / (bins[i+2] - bins[i+1]);
+    _hzMel(hz){return 2595*Math.log10(1+hz/700)}
+    _melHz(m){return 700*(10**(m/2595)-1)}
+    _melBank(){
+        const lo=this._hzMel(0),hi=this._hzMel(this.sr/2);
+        const pts=Array.from({length:this.nFilters+2},(_,i)=>this._melHz(lo+(hi-lo)*i/(this.nFilters+1)));
+        const bins=pts.map(f=>Math.floor((this.fftSize+1)*f/this.sr));
+        return Array.from({length:this.nFilters},(_,i)=>{
+            const f=new Float32Array(this.fftSize/2+1);
+            for(let j=bins[i];j<bins[i+1];j++)if(j<f.length)f[j]=(j-bins[i])/(bins[i+1]-bins[i]);
+            for(let j=bins[i+1];j<bins[i+2];j++)if(j<f.length)f[j]=(bins[i+2]-j)/(bins[i+2]-bins[i+1]);
             return f;
         });
     }
-    _powerSpec(frame) {
-        const w = new Float32Array(this.fftSize);
-        for (let i = 0; i < Math.min(frame.length, this.fftSize); i++)
-            w[i] = frame[i] * (0.54 - 0.46 * Math.cos(2 * Math.PI * i / (this.fftSize - 1)));
-        const p = new Float32Array(this.fftSize / 2 + 1);
-        for (let k = 0; k <= this.fftSize / 2; k++) {
-            let re = 0, im = 0;
-            for (let n = 0; n < this.fftSize; n++) {
-                const a = -2 * Math.PI * k * n / this.fftSize;
-                re += w[n] * Math.cos(a); im += w[n] * Math.sin(a);
-            }
-            p[k] = (re * re + im * im) / this.fftSize;
+    _powerSpec(frame){
+        const w=new Float32Array(this.fftSize);
+        for(let i=0;i<Math.min(frame.length,this.fftSize);i++) w[i]=frame[i]*(0.54-0.46*Math.cos(2*Math.PI*i/(this.fftSize-1)));
+        const p=new Float32Array(this.fftSize/2+1);
+        for(let k=0;k<=this.fftSize/2;k++){
+            let re=0,im=0;
+            for(let n=0;n<this.fftSize;n++){const a=-2*Math.PI*k*n/this.fftSize;re+=w[n]*Math.cos(a);im+=w[n]*Math.sin(a);}
+            p[k]=(re*re+im*im)/this.fftSize;
         }
         return p;
     }
-    extractFrame(frame) {
-        const p = this._powerSpec(frame);
-        const mel = new Float32Array(this.nFilters);
-        for (let i = 0; i < this.nFilters; i++) {
-            let s = 0; for (let j = 0; j < p.length; j++) s += p[j] * this.filters[i][j];
-            mel[i] = Math.log(s + 1e-10);
-        }
-        const mfcc = new Float32Array(this.nCoeffs);
-        for (let i = 0; i < this.nCoeffs; i++) {
-            let s = 0; for (let j = 0; j < this.nFilters; j++) s += mel[j] * Math.cos(Math.PI * i * (j + 0.5) / this.nFilters);
-            mfcc[i] = s;
-        }
+    extractFrame(frame){
+        const p=this._powerSpec(frame);
+        const mel=new Float32Array(this.nFilters);
+        for(let i=0;i<this.nFilters;i++){let s=0;for(let j=0;j<p.length;j++)s+=p[j]*this.filters[i][j];mel[i]=Math.log(s+1e-10);}
+        const mfcc=new Float32Array(this.nCoeffs);
+        for(let i=0;i<this.nCoeffs;i++){let s=0;for(let j=0;j<this.nFilters;j++)s+=mel[j]*Math.cos(Math.PI*i*(j+.5)/this.nFilters);mfcc[i]=s;}
         return mfcc;
     }
-    extract(audio) {
-        const hop = this.fftSize / 2, frames = [];
-        for (let i = 0; i + this.fftSize <= audio.length; i += hop) frames.push(this.extractFrame(audio.slice(i, i + this.fftSize)));
-        const avg = new Float32Array(this.nCoeffs), delta = new Float32Array(this.nCoeffs);
-        for (let i = 0; i < this.nCoeffs; i++) { let s = 0; for (const f of frames) s += f[i]; avg[i] = s / frames.length; }
-        if (frames.length > 2) for (let i = 0; i < this.nCoeffs; i++) {
-            let s = 0; for (let t = 1; t < frames.length - 1; t++) s += Math.abs(frames[t+1][i] - frames[t-1][i]);
-            delta[i] = s / (frames.length - 2);
-        }
-        return { avg, delta, frames };
+    extract(audio){
+        const hop=this.fftSize/2,frames=[];
+        for(let i=0;i+this.fftSize<=audio.length;i+=hop)frames.push(this.extractFrame(audio.slice(i,i+this.fftSize)));
+        const avg=new Float32Array(this.nCoeffs),delta=new Float32Array(this.nCoeffs);
+        for(let i=0;i<this.nCoeffs;i++){let s=0;for(const f of frames)s+=f[i];avg[i]=s/frames.length;}
+        if(frames.length>2)for(let i=0;i<this.nCoeffs;i++){let s=0;for(let t=1;t<frames.length-1;t++)s+=Math.abs(frames[t+1][i]-frames[t-1][i]);delta[i]=s/(frames.length-2);}
+        return{avg,delta,frames};
     }
 }
 
@@ -336,569 +517,309 @@ class MFCCExtractor {
 // Audio Feature Extractor
 // ================================================================
 class FeatureExtractor {
-    constructor(data, sr) { this.d = data; this.sr = sr; }
-
-    pitch() {
-        const minLag = Math.floor(this.sr / 800), maxLag = Math.floor(this.sr / 80);
-        const frameSize = Math.floor(this.sr * 0.06), hop = frameSize * 2, pitches = [];
-        for (let s = 0; s + frameSize * 2 <= this.d.length; s += hop) {
-            const frame = this.d.slice(s, s + frameSize * 2);
-            const rms = Math.sqrt(frame.reduce((a, x) => a + x*x, 0) / frame.length);
-            if (rms < 0.01) continue;
-            let bestC = -1, bestL = minLag;
-            for (let lag = minLag; lag <= Math.min(maxLag, frame.length/2); lag++) {
-                let c=0, n1=0, n2=0; const len = frame.length - lag;
-                for (let i = 0; i < len; i++) { c += frame[i]*frame[i+lag]; n1 += frame[i]**2; n2 += frame[i+lag]**2; }
-                const nc = c / (Math.sqrt(n1*n2) + 1e-10);
-                if (nc > bestC) { bestC = nc; bestL = lag; }
+    constructor(data,sr){this.d=data;this.sr=sr;}
+    pitch(){
+        const minLag=Math.floor(this.sr/800),maxLag=Math.floor(this.sr/80);
+        const frameSize=Math.floor(this.sr*.06),hop=frameSize*2,pitches=[];
+        for(let s=0;s+frameSize*2<=this.d.length;s+=hop){
+            const frame=this.d.slice(s,s+frameSize*2);
+            const rms=Math.sqrt(frame.reduce((a,x)=>a+x*x,0)/frame.length);
+            if(rms<.01)continue;
+            let bestC=-1,bestL=minLag;
+            for(let lag=minLag;lag<=Math.min(maxLag,frame.length/2);lag++){
+                let c=0,n1=0,n2=0;const len=frame.length-lag;
+                for(let i=0;i<len;i++){c+=frame[i]*frame[i+lag];n1+=frame[i]**2;n2+=frame[i+lag]**2;}
+                const nc=c/(Math.sqrt(n1*n2)+1e-10);
+                if(nc>bestC){bestC=nc;bestL=lag;}
             }
-            if (bestC > 0.4) pitches.push(this.sr / bestL);
+            if(bestC>.4)pitches.push(this.sr/bestL);
         }
-        if (!pitches.length) return { mean: 350, std: 50 };
-        pitches.sort((a,b) => a-b);
-        const tr = pitches.slice(Math.floor(pitches.length*.1), Math.ceil(pitches.length*.9));
-        if (!tr.length) return { mean: 350, std: 50 };
-        const m = tr.reduce((a,b) => a+b, 0) / tr.length;
-        return { mean: Math.round(m), std: Math.round(Math.sqrt(tr.reduce((s,p) => s+(p-m)**2, 0) / tr.length)) };
+        if(!pitches.length)return{mean:350,std:50};
+        pitches.sort((a,b)=>a-b);
+        const tr=pitches.slice(Math.floor(pitches.length*.1),Math.ceil(pitches.length*.9));
+        if(!tr.length)return{mean:350,std:50};
+        const m=tr.reduce((a,b)=>a+b,0)/tr.length;
+        return{mean:Math.round(m),std:Math.round(Math.sqrt(tr.reduce((s,p)=>s+(p-m)**2,0)/tr.length))};
     }
-
-    energy() {
-        const fs = Math.floor(this.sr * 0.05), energies = [];
-        for (let i = 0; i + fs <= this.d.length; i += fs) {
-            let e = 0; for (let j = 0; j < fs; j++) e += this.d[i+j]**2;
-            energies.push(Math.sqrt(e / fs));
-        }
-        const mean = energies.reduce((a,b) => a+b, 0) / energies.length;
-        const std = Math.sqrt(energies.reduce((s,e) => s+(e-mean)**2, 0) / energies.length);
-        const coefVar = std / (mean + 1e-10);
-        const thr = mean * 0.25; let gaps = 0, inS = false, silD = [], curS = 0;
-        for (const e of energies) {
-            if (e < thr) { if (!inS) { gaps++; curS = 0; } inS = true; curS++; }
-            else { if (inS && curS > 0) silD.push(curS); inS = false; }
-        }
-        let rhythm = 0;
-        if (silD.length > 1) { const ms = silD.reduce((a,b) => a+b,0)/silD.length; rhythm = 1/(1+Math.sqrt(silD.reduce((s,d) => s+(d-ms)**2,0)/silD.length)); }
-        let trend = 0;
-        if (energies.length > 4) {
-            const h = Math.floor(energies.length/2);
-            const a1 = energies.slice(0,h).reduce((a,b) => a+b,0)/h;
-            const a2 = energies.slice(h).reduce((a,b) => a+b,0)/(energies.length-h);
-            trend = (a2 - a1) / (mean + 1e-10);
-        }
-        return { rms: mean, variation: coefVar, silenceGaps: gaps, rhythm, trend, peak: Math.max(...energies) };
+    energy(){
+        const fs=Math.floor(this.sr*.05),energies=[];
+        for(let i=0;i+fs<=this.d.length;i+=fs){let e=0;for(let j=0;j<fs;j++)e+=this.d[i+j]**2;energies.push(Math.sqrt(e/fs));}
+        const mean=energies.reduce((a,b)=>a+b,0)/energies.length;
+        const std=Math.sqrt(energies.reduce((s,e)=>s+(e-mean)**2,0)/energies.length);
+        const coefVar=std/(mean+1e-10);
+        const thr=mean*.25;let gaps=0,inS=false,silD=[],curS=0;
+        for(const e of energies){if(e<thr){if(!inS){gaps++;curS=0;}inS=true;curS++;}else{if(inS&&curS>0)silD.push(curS);inS=false;}}
+        let rhythm=0;
+        if(silD.length>1){const ms=silD.reduce((a,b)=>a+b,0)/silD.length;rhythm=1/(1+Math.sqrt(silD.reduce((s,d)=>s+(d-ms)**2,0)/silD.length));}
+        let trend=0;
+        if(energies.length>4){const h=Math.floor(energies.length/2);const a1=energies.slice(0,h).reduce((a,b)=>a+b,0)/h;const a2=energies.slice(h).reduce((a,b)=>a+b,0)/(energies.length-h);trend=(a2-a1)/(mean+1e-10);}
+        return{rms:mean,variation:coefVar,silenceGaps:gaps,rhythm,trend,peak:Math.max(...energies)};
     }
-
-    centroid() {
-        const N = 1024; let total = 0, count = 0;
-        for (let s = 0; s + N <= this.d.length; s += N * 2) {
-            let wSum = 0, mSum = 0;
-            for (let k = 0; k < N/2; k++) {
-                let re=0, im=0;
-                for (let n = 0; n < N; n++) { const a = -2*Math.PI*k*n/N; re += this.d[s+n]*Math.cos(a); im += this.d[s+n]*Math.sin(a); }
-                const mag = Math.sqrt(re*re + im*im), freq = k * this.sr / N;
-                wSum += freq * mag; mSum += mag;
-            }
-            if (mSum > 0) { total += wSum / mSum; count++; }
-        }
-        return count ? Math.round(total / count) : 500;
+    centroid(){
+        const N=1024;let total=0,count=0;
+        for(let s=0;s+N<=this.d.length;s+=N*2){let wSum=0,mSum=0;for(let k=0;k<N/2;k++){let re=0,im=0;for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=this.d[s+n]*Math.cos(a);im+=this.d[s+n]*Math.sin(a);}const mag=Math.sqrt(re*re+im*im),freq=k*this.sr/N;wSum+=freq*mag;mSum+=mag;}if(mSum>0){total+=wSum/mSum;count++;}}
+        return count?Math.round(total/count):500;
     }
-
-    rolloff() {
-        const N = 1024, mags = new Float32Array(N/2); let fc = 0;
-        for (let s = 0; s + N <= this.d.length; s += N*2) {
-            for (let k = 0; k < N/2; k++) {
-                let re=0, im=0;
-                for (let n = 0; n < N; n++) { const a = -2*Math.PI*k*n/N; re += this.d[s+n]*Math.cos(a); im += this.d[s+n]*Math.sin(a); }
-                mags[k] += Math.sqrt(re*re+im*im);
-            }
-            fc++;
-        }
-        if (!fc) return 2000;
-        let tot = 0; for (let k = 0; k < mags.length; k++) tot += mags[k];
-        let cum = 0;
-        for (let k = 0; k < mags.length; k++) { cum += mags[k]; if (cum >= 0.85 * tot) return Math.round(k * this.sr / N); }
-        return Math.round(this.sr / 4);
+    rolloff(){
+        const N=1024,mags=new Float32Array(N/2);let fc=0;
+        for(let s=0;s+N<=this.d.length;s+=N*2){for(let k=0;k<N/2;k++){let re=0,im=0;for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=this.d[s+n]*Math.cos(a);im+=this.d[s+n]*Math.sin(a);}mags[k]+=Math.sqrt(re*re+im*im);}fc++;}
+        if(!fc)return 2000;let tot=0;for(let k=0;k<mags.length;k++)tot+=mags[k];let cum=0;
+        for(let k=0;k<mags.length;k++){cum+=mags[k];if(cum>=.85*tot)return Math.round(k*this.sr/N);}
+        return Math.round(this.sr/4);
     }
 }
 
 // ================================================================
-// TensorFlow.js Neural Network Baby Cry Classifier
+// TensorFlow.js Neural Network
 // ================================================================
+const CLASS_NAMES=['hungry','tired','pain','diaper','attention','colic','burping','temperature'];
+const NUM_FEATURES=32;
+let nnModel=null,featureMeans=null,featureStds=null;
 
-// 8 classes matching DeepInfant/donateacry research
-const CLASS_NAMES = ['hungry', 'tired', 'pain', 'diaper', 'attention', 'colic', 'burping', 'temperature'];
-const NUM_FEATURES = 32; // 13 MFCC + 13 delta MFCC + pitch_mean, pitch_std, rms, variation, silenceGaps, rhythm
-
-let nnModel = null;
-
-// Feature distributions from published research (donateacry-corpus analysis + DeepInfant papers)
-// Format: [mean, std] for each of the 32 features per class
-const RESEARCH_DISTRIBUTIONS = {
-    //                MFCC0    MFCC1    MFCC2    MFCC3    MFCC4    MFCC5    MFCC6    MFCC7    MFCC8    MFCC9    MFCC10   MFCC11   MFCC12
-    //                dMFCC0   dMFCC1   dMFCC2   dMFCC3   dMFCC4   dMFCC5   dMFCC6   dMFCC7   dMFCC8   dMFCC9   dMFCC10  dMFCC11  dMFCC12
-    //                pMean    pStd     rms      var      gaps     rhythm
-    hungry: {
-        mean: [-5.2, 3.1, -1.2, 0.8, -0.5, 0.3, -0.2, 0.1, -0.1, 0.05, -0.03, 0.02, -0.01,
-               0.8, 0.5, 0.3, 0.2, 0.15, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01,
-               380, 45, 0.08, 0.6, 3.5, 0.55],
-        std:  [1.5, 1.2, 0.8, 0.6, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.12, 0.1, 0.08,
-               0.3, 0.2, 0.15, 0.12, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.015, 0.01,
-               60, 20, 0.03, 0.2, 1.5, 0.15]
-    },
-    tired: {
-        mean: [-4.0, 2.0, -0.8, 0.5, -0.3, 0.2, -0.15, 0.08, -0.06, 0.03, -0.02, 0.01, -0.005,
-               0.5, 0.3, 0.2, 0.12, 0.08, 0.06, 0.05, 0.04, 0.03, 0.025, 0.02, 0.015, 0.008,
-               290, 35, 0.05, 0.85, 5, 0.3],
-        std:  [1.2, 1.0, 0.7, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.12, 0.1, 0.08, 0.06,
-               0.2, 0.15, 0.12, 0.08, 0.06, 0.05, 0.04, 0.03, 0.025, 0.02, 0.015, 0.01, 0.007,
-               50, 15, 0.02, 0.25, 2, 0.12]
-    },
-    pain: {
-        mean: [-6.5, 4.5, -1.8, 1.2, -0.8, 0.5, -0.35, 0.2, -0.15, 0.08, -0.05, 0.03, -0.02,
-               1.2, 0.8, 0.5, 0.35, 0.25, 0.18, 0.12, 0.09, 0.07, 0.05, 0.04, 0.03, 0.02,
-               550, 90, 0.15, 0.4, 1.2, 0.2],
-        std:  [1.8, 1.5, 1.0, 0.8, 0.6, 0.45, 0.35, 0.28, 0.22, 0.18, 0.14, 0.11, 0.09,
-               0.4, 0.3, 0.22, 0.18, 0.14, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.015,
-               80, 30, 0.04, 0.15, 0.8, 0.1]
-    },
-    diaper: {
-        mean: [-4.5, 2.5, -1.0, 0.6, -0.4, 0.25, -0.18, 0.1, -0.08, 0.04, -0.025, 0.015, -0.008,
-               0.6, 0.4, 0.25, 0.15, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.025, 0.018, 0.01,
-               340, 50, 0.07, 0.7, 3, 0.4],
-        std:  [1.3, 1.1, 0.75, 0.55, 0.42, 0.35, 0.28, 0.22, 0.18, 0.14, 0.11, 0.09, 0.07,
-               0.25, 0.18, 0.13, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.018, 0.012, 0.008,
-               55, 18, 0.025, 0.22, 1.5, 0.13]
-    },
-    attention: {
-        mean: [-3.8, 2.2, -0.7, 0.45, -0.3, 0.18, -0.12, 0.07, -0.05, 0.03, -0.02, 0.01, -0.005,
-               0.7, 0.45, 0.28, 0.18, 0.12, 0.09, 0.07, 0.05, 0.04, 0.03, 0.02, 0.016, 0.009,
-               350, 55, 0.06, 1.1, 5.5, 0.25],
-        std:  [1.2, 1.0, 0.7, 0.48, 0.38, 0.3, 0.24, 0.2, 0.16, 0.12, 0.1, 0.08, 0.06,
-               0.28, 0.2, 0.15, 0.1, 0.08, 0.065, 0.05, 0.04, 0.03, 0.025, 0.018, 0.012, 0.008,
-               60, 22, 0.022, 0.3, 2, 0.12]
-    },
-    colic: {
-        mean: [-6.8, 4.8, -2.0, 1.3, -0.9, 0.55, -0.38, 0.22, -0.16, 0.09, -0.06, 0.035, -0.02,
-               1.1, 0.7, 0.45, 0.3, 0.22, 0.16, 0.11, 0.08, 0.065, 0.05, 0.038, 0.028, 0.018,
-               480, 85, 0.13, 0.45, 1.5, 0.18],
-        std:  [1.7, 1.4, 0.95, 0.75, 0.58, 0.43, 0.34, 0.27, 0.21, 0.17, 0.13, 0.1, 0.08,
-               0.38, 0.28, 0.2, 0.16, 0.12, 0.09, 0.07, 0.055, 0.045, 0.035, 0.025, 0.02, 0.013,
-               75, 28, 0.04, 0.18, 1, 0.1]
-    },
-    burping: {
-        mean: [-4.8, 2.8, -1.1, 0.7, -0.45, 0.28, -0.2, 0.12, -0.09, 0.05, -0.03, 0.018, -0.01,
-               0.9, 0.55, 0.35, 0.22, 0.15, 0.11, 0.08, 0.06, 0.048, 0.035, 0.028, 0.02, 0.012,
-               420, 60, 0.09, 0.75, 4, 0.35],
-        std:  [1.4, 1.15, 0.8, 0.6, 0.45, 0.36, 0.29, 0.23, 0.18, 0.14, 0.11, 0.09, 0.07,
-               0.32, 0.22, 0.16, 0.12, 0.09, 0.07, 0.055, 0.045, 0.035, 0.028, 0.02, 0.015, 0.01,
-               65, 22, 0.03, 0.24, 1.8, 0.14]
-    },
-    temperature: {
-        mean: [-4.3, 2.4, -0.9, 0.55, -0.38, 0.22, -0.16, 0.09, -0.07, 0.035, -0.022, 0.013, -0.007,
-               0.65, 0.42, 0.27, 0.17, 0.11, 0.085, 0.065, 0.05, 0.038, 0.03, 0.022, 0.017, 0.01,
-               360, 48, 0.075, 0.72, 3.2, 0.42],
-        std:  [1.3, 1.05, 0.72, 0.52, 0.4, 0.33, 0.26, 0.21, 0.17, 0.13, 0.1, 0.085, 0.065,
-               0.26, 0.19, 0.14, 0.1, 0.078, 0.06, 0.048, 0.038, 0.03, 0.024, 0.018, 0.013, 0.009,
-               52, 17, 0.024, 0.22, 1.5, 0.14]
-    }
+const RESEARCH_DISTRIBUTIONS={
+    hungry:{mean:[-5.2,3.1,-1.2,.8,-.5,.3,-.2,.1,-.1,.05,-.03,.02,-.01,.8,.5,.3,.2,.15,.1,.08,.06,.05,.04,.03,.02,.01,380,45,.08,.6,3.5,.55],std:[1.5,1.2,.8,.6,.5,.4,.3,.25,.2,.15,.12,.1,.08,.3,.2,.15,.12,.1,.08,.06,.05,.04,.03,.02,.015,.01,60,20,.03,.2,1.5,.15]},
+    tired:{mean:[-4,2,-.8,.5,-.3,.2,-.15,.08,-.06,.03,-.02,.01,-.005,.5,.3,.2,.12,.08,.06,.05,.04,.03,.025,.02,.015,.008,290,35,.05,.85,5,.3],std:[1.2,1,.7,.5,.4,.3,.25,.2,.15,.12,.1,.08,.06,.2,.15,.12,.08,.06,.05,.04,.03,.025,.02,.015,.01,.007,50,15,.02,.25,2,.12]},
+    pain:{mean:[-6.5,4.5,-1.8,1.2,-.8,.5,-.35,.2,-.15,.08,-.05,.03,-.02,1.2,.8,.5,.35,.25,.18,.12,.09,.07,.05,.04,.03,.02,550,90,.15,.4,1.2,.2],std:[1.8,1.5,1,.8,.6,.45,.35,.28,.22,.18,.14,.11,.09,.4,.3,.22,.18,.14,.1,.08,.06,.05,.04,.03,.02,.015,80,30,.04,.15,.8,.1]},
+    diaper:{mean:[-4.5,2.5,-1,.6,-.4,.25,-.18,.1,-.08,.04,-.025,.015,-.008,.6,.4,.25,.15,.1,.08,.06,.05,.04,.03,.025,.018,.01,340,50,.07,.7,3,.4],std:[1.3,1.1,.75,.55,.42,.35,.28,.22,.18,.14,.11,.09,.07,.25,.18,.13,.1,.08,.06,.05,.04,.03,.02,.018,.012,.008,55,18,.025,.22,1.5,.13]},
+    attention:{mean:[-3.8,2.2,-.7,.45,-.3,.18,-.12,.07,-.05,.03,-.02,.01,-.005,.7,.45,.28,.18,.12,.09,.07,.05,.04,.03,.02,.016,.009,350,55,.06,1.1,5.5,.25],std:[1.2,1,.7,.48,.38,.3,.24,.2,.16,.12,.1,.08,.06,.28,.2,.15,.1,.08,.065,.05,.04,.03,.025,.018,.012,.008,60,22,.022,.3,2,.12]},
+    colic:{mean:[-6.8,4.8,-2,1.3,-.9,.55,-.38,.22,-.16,.09,-.06,.035,-.02,1.1,.7,.45,.3,.22,.16,.11,.08,.065,.05,.038,.028,.018,480,85,.13,.45,1.5,.18],std:[1.7,1.4,.95,.75,.58,.43,.34,.27,.21,.17,.13,.1,.08,.38,.28,.2,.16,.12,.09,.07,.055,.045,.035,.025,.02,.013,75,28,.04,.18,1,.1]},
+    burping:{mean:[-4.8,2.8,-1.1,.7,-.45,.28,-.2,.12,-.09,.05,-.03,.018,-.01,.9,.55,.35,.22,.15,.11,.08,.06,.048,.035,.028,.02,.012,420,60,.09,.75,4,.35],std:[1.4,1.15,.8,.6,.45,.36,.29,.23,.18,.14,.11,.09,.07,.32,.22,.16,.12,.09,.07,.055,.045,.035,.028,.02,.015,.01,65,22,.03,.24,1.8,.14]},
+    temperature:{mean:[-4.3,2.4,-.9,.55,-.38,.22,-.16,.09,-.07,.035,-.022,.013,-.007,.65,.42,.27,.17,.11,.085,.065,.05,.038,.03,.022,.017,.01,360,48,.075,.72,3.2,.42],std:[1.3,1.05,.72,.52,.4,.33,.26,.21,.17,.13,.1,.085,.065,.26,.19,.14,.1,.078,.06,.048,.038,.03,.024,.018,.013,.009,52,17,.024,.22,1.5,.14]}
 };
 
-function gaussRandom(mean, std) {
-    const u1 = Math.random(), u2 = Math.random();
-    return mean + std * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+function gaussRandom(m,s){const u1=Math.random(),u2=Math.random();return m+s*Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);}
+
+function generateTrainingData(n=600){
+    const xs=[],ys=[];
+    CLASS_NAMES.forEach((cls,idx)=>{const d=RESEARCH_DISTRIBUTIONS[cls];for(let i=0;i<n;i++){xs.push(d.mean.map((m,j)=>gaussRandom(m,d.std[j])));const l=new Array(CLASS_NAMES.length).fill(0);l[idx]=1;ys.push(l);}});
+    const idx=xs.map((_,i)=>i);for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+    return{xs:tf.tensor2d(idx.map(i=>xs[i])),ys:tf.tensor2d(idx.map(i=>ys[i]))};
 }
 
-function generateTrainingData(samplesPerClass = 500) {
-    const xs = [], ys = [];
-    CLASS_NAMES.forEach((cls, idx) => {
-        const dist = RESEARCH_DISTRIBUTIONS[cls];
-        for (let i = 0; i < samplesPerClass; i++) {
-            const sample = dist.mean.map((m, j) => gaussRandom(m, dist.std[j]));
-            xs.push(sample);
-            const label = new Array(CLASS_NAMES.length).fill(0);
-            label[idx] = 1;
-            ys.push(label);
-        }
-    });
-    // Shuffle
-    const indices = xs.map((_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    return {
-        xs: tf.tensor2d(indices.map(i => xs[i])),
-        ys: tf.tensor2d(indices.map(i => ys[i]))
-    };
-}
-
-// Normalization params (computed from training data)
-let featureMeans = null, featureStds = null;
-
-async function buildAndTrainModel() {
-    const statusEl = document.getElementById('modelStatus');
-
-    statusEl.textContent = '🧠 正在生成训练数据 (基于研究论文特征分布)...';
-    await tf.nextFrame();
-
-    const { xs, ys } = generateTrainingData(600);
-
-    // Compute normalization params
-    featureMeans = xs.mean(0);
-    featureStds = xs.sub(featureMeans).square().mean(0).sqrt().add(1e-8);
-
-    const xsNorm = xs.sub(featureMeans).div(featureStds);
-
-    statusEl.textContent = '🧠 正在构建神经网络 (3层, 128→64→32)...';
-    await tf.nextFrame();
-
-    const model = tf.sequential();
-    model.add(tf.layers.dense({ inputShape: [NUM_FEATURES], units: 128, activation: 'relu', kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
-    model.add(tf.layers.dropout({ rate: 0.3 }));
-    model.add(tf.layers.dense({ units: 64, activation: 'relu', kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
-    model.add(tf.layers.dropout({ rate: 0.2 }));
-    model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: CLASS_NAMES.length, activation: 'softmax' }));
-
-    model.compile({ optimizer: tf.train.adam(0.001), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
-
-    statusEl.textContent = '🧠 正在训练神经网络 (150轮)...';
-    await tf.nextFrame();
-
-    await model.fit(xsNorm, ys, {
-        epochs: 150,
-        batchSize: 64,
-        validationSplit: 0.15,
-        shuffle: true,
-        callbacks: {
-            onEpochEnd: async (epoch, logs) => {
-                if (epoch % 20 === 0 || epoch === 149) {
-                    statusEl.textContent = `🧠 训练中... 轮次 ${epoch + 1}/150 | 准确率: ${(logs.val_acc * 100).toFixed(1)}%`;
-                    await tf.nextFrame();
-                }
-            }
-        }
-    });
-
-    xs.dispose(); ys.dispose(); xsNorm.dispose();
+async function buildAndTrainModel(){
+    const el=document.getElementById('modelStatus');
+    el.textContent=T('modelGenData'); await tf.nextFrame();
+    const{xs,ys}=generateTrainingData(600);
+    featureMeans=xs.mean(0);featureStds=xs.sub(featureMeans).square().mean(0).sqrt().add(1e-8);
+    const xsN=xs.sub(featureMeans).div(featureStds);
+    el.textContent=T('modelBuilding'); await tf.nextFrame();
+    const model=tf.sequential();
+    model.add(tf.layers.dense({inputShape:[NUM_FEATURES],units:128,activation:'relu',kernelRegularizer:tf.regularizers.l2({l2:.001})}));
+    model.add(tf.layers.dropout({rate:.3}));
+    model.add(tf.layers.dense({units:64,activation:'relu',kernelRegularizer:tf.regularizers.l2({l2:.001})}));
+    model.add(tf.layers.dropout({rate:.2}));
+    model.add(tf.layers.dense({units:32,activation:'relu'}));
+    model.add(tf.layers.dense({units:CLASS_NAMES.length,activation:'softmax'}));
+    model.compile({optimizer:tf.train.adam(.001),loss:'categoricalCrossentropy',metrics:['accuracy']});
+    el.textContent=T('modelTraining'); await tf.nextFrame();
+    await model.fit(xsN,ys,{epochs:150,batchSize:64,validationSplit:.15,shuffle:true,callbacks:{
+        onEpochEnd:async(epoch,logs)=>{if(epoch%20===0||epoch===149){el.textContent=T('modelEpoch')(epoch+1,(logs.val_acc*100).toFixed(1));await tf.nextFrame();}}
+    }});
+    xs.dispose();ys.dispose();xsN.dispose();
     return model;
 }
 
-function extractFeatureVector(mfcc, pitch, energy) {
-    const vec = [];
-    for (let i = 0; i < 13; i++) vec.push(mfcc.avg[i] || 0);
-    for (let i = 0; i < 13; i++) vec.push(mfcc.delta[i] || 0);
-    vec.push(pitch.mean, pitch.std, energy.rms, energy.variation, energy.silenceGaps, energy.rhythm);
-    return vec;
+function extractFeatureVector(mfcc,pitch,energy){
+    const v=[];for(let i=0;i<13;i++)v.push(mfcc.avg[i]||0);for(let i=0;i<13;i++)v.push(mfcc.delta[i]||0);
+    v.push(pitch.mean,pitch.std,energy.rms,energy.variation,energy.silenceGaps,energy.rhythm);return v;
 }
 
-async function predictWithNN(featureVec) {
-    if (!nnModel) return null;
-    const input = tf.tensor2d([featureVec]);
-    const normalized = input.sub(featureMeans).div(featureStds);
-    const pred = nnModel.predict(normalized);
-    const probs = await pred.data();
-    input.dispose(); normalized.dispose(); pred.dispose();
-
-    const result = CLASS_NAMES.map((name, i) => ({ name, prob: probs[i] }));
-    result.sort((a, b) => b.prob - a.prob);
-    return result;
+async function predictWithNN(vec){
+    if(!nnModel)return null;
+    const input=tf.tensor2d([vec]);const norm=input.sub(featureMeans).div(featureStds);const pred=nnModel.predict(norm);
+    const probs=await pred.data();input.dispose();norm.dispose();pred.dispose();
+    const result=CLASS_NAMES.map((name,i)=>({name,prob:probs[i]}));result.sort((a,b)=>b.prob-a.prob);return result;
 }
 
 // ================================================================
 // Dunstan Detector
 // ================================================================
 class DunstanDetector {
-    detect(pitch, energy, mfcc) {
-        const s = { neh:0, eh:0, owh:0, eairh:0, heh:0 };
-        if (pitch.mean >= 300 && pitch.mean <= 500) s.neh += 20;
-        if (energy.rhythm > 0.4) s.neh += 25;
-        if (energy.variation >= 0.3 && energy.variation <= 0.9) s.neh += 15;
-        if (energy.trend > 0) s.neh += 10;
-
-        if (pitch.mean >= 350 && pitch.mean <= 550) s.eh += 15;
-        if (energy.silenceGaps >= 3) s.eh += 20;
-        if (energy.variation > 0.8) s.eh += 20;
-
-        if (pitch.mean < 350) s.owh += 25;
-        if (energy.rms < 0.08) s.owh += 20;
-        if (energy.trend < -0.1) s.owh += 15;
-        if (pitch.std < 60) s.owh += 10;
-
-        if (pitch.mean > 400) s.eairh += 20;
-        if (pitch.std > 80) s.eairh += 15;
-        if (energy.rms > 0.1) s.eairh += 15;
-        if (energy.variation < 0.5) s.eairh += 10;
-
-        if (energy.variation > 0.6) s.heh += 20;
-        if (pitch.mean >= 250 && pitch.mean <= 450) s.heh += 15;
-        if (energy.silenceGaps >= 2 && energy.silenceGaps <= 5) s.heh += 15;
-
-        const sorted = Object.entries(s).sort((a,b) => b[1]-a[1]);
-        const map = { neh:'Neh (饿了)', eh:'Eh (拍嗝)', owh:'Owh (困了)', eairh:'Eairh (胀气)', heh:'Heh (不适)' };
-        return { type: sorted[0][0], label: map[sorted[0][0]], score: sorted[0][1] };
+    detect(pitch,energy,mfcc){
+        const s={neh:0,eh:0,owh:0,eairh:0,heh:0};
+        if(pitch.mean>=300&&pitch.mean<=500)s.neh+=20;if(energy.rhythm>.4)s.neh+=25;if(energy.variation>=.3&&energy.variation<=.9)s.neh+=15;if(energy.trend>0)s.neh+=10;
+        if(pitch.mean>=350&&pitch.mean<=550)s.eh+=15;if(energy.silenceGaps>=3)s.eh+=20;if(energy.variation>.8)s.eh+=20;
+        if(pitch.mean<350)s.owh+=25;if(energy.rms<.08)s.owh+=20;if(energy.trend<-.1)s.owh+=15;if(pitch.std<60)s.owh+=10;
+        if(pitch.mean>400)s.eairh+=20;if(pitch.std>80)s.eairh+=15;if(energy.rms>.1)s.eairh+=15;if(energy.variation<.5)s.eairh+=10;
+        if(energy.variation>.6)s.heh+=20;if(pitch.mean>=250&&pitch.mean<=450)s.heh+=15;if(energy.silenceGaps>=2&&energy.silenceGaps<=5)s.heh+=15;
+        const sorted=Object.entries(s).sort((a,b)=>b[1]-a[1]);
+        return{type:sorted[0][0],label:T('dunstanLabels')[sorted[0][0]],score:sorted[0][1]};
     }
 }
-
-// ================================================================
-// Cry Types Database
-// ================================================================
-const cryTypes = {
-    hungry: { emoji:'🍼', reason:'宝宝饿了',
-        description:'神经网络检测到有节奏的、重复性哭声模式，MFCC特征与饥饿哭声高度匹配。频率在300-500Hz范围，能量逐渐升高，符合"Neh"音特征。',
-        tips:['尝试给宝宝喂奶或辅食（根据月龄）','观察宝宝是否有吮吸手指、转头寻找乳头（觅食反射）','新生儿通常2-3小时需要喂一次','如果母乳喂养，确保含接正确，听到吞咽声'] },
-    tired: { emoji:'😴', reason:'宝宝困了想睡觉',
-        description:'模型识别到低频、低能量且逐渐减弱的哭声模式。MFCC变化率低，说明哭声单调，基频低于350Hz，与疲倦信号高度吻合。',
-        tips:['轻轻摇晃宝宝，营造安静昏暗的环境','播放白噪音模拟子宫环境','用襁褓包裹给予安全感','注意清醒窗口期：新生儿约45-60分钟'] },
-    pain: { emoji:'🤕', reason:'宝宝可能不舒服/疼痛',
-        description:'检测到高频率(>500Hz)、高能量的持续性哭声。频谱质心偏高，MFCC特征显示异常的频谱分布，这种突发尖锐模式通常与疼痛相关。',
-        tips:['检查全身是否有异常（发热、红疹、头发缠绕手指脚趾）','轻拍背部排气，做"蹬自行车"动作','检查衣物标签是否刺激皮肤','哭声持续且异常尖锐请及时就医'] },
-    diaper: { emoji:'🧷', reason:'需要换尿布了',
-        description:'中等强度的间歇性哭声，MFCC特征显示非急性不适模式。能量变化适中，频率在中间范围，更像是"烦躁的抱怨"而非剧烈不适。',
-        tips:['检查尿布是否湿了或脏了','清洁后涂抹护臀霜','确保尿布尺寸合适','尿布疹严重时让宝宝光屁股晾一会儿'] },
-    attention: { emoji:'🤗', reason:'宝宝想要抱抱/陪伴',
-        description:'明显的间歇性哭泣模式——哭哭停停像在"试探"反应。能量变化大且不规律，神经网络将此模式归类为社交性需求而非生理需求。',
-        tips:['抱起宝宝让他感受体温和心跳','和宝宝说话、做眼神交流','适度肌肤接触(skin-to-skin)','换个环境看新事物也有效'] },
-    colic: { emoji:'😫', reason:'宝宝可能肠绞痛',
-        description:'高强度持续性哭声，频率波动大，MFCC模式与"Eairh"音高度匹配。频谱显示能量集中在高频段，符合腹部用力发声的特征。',
-        tips:['5S安抚法：襁褓/侧躺/嘘声/摇晃/吸吮','顺时针按摩肚子帮助肠道蠕动','试试飞机抱（趴在前臂上）','通常3-4个月后好转，妈妈注意自己情绪'] },
-    burping: { emoji:'🫧', reason:'宝宝需要拍嗝',
-        description:'短促间断性哭声，MFCC变化率高。神经网络识别到与"Eh"音一致的声带模式——胃部气体上升挤压声带产生的反射声。',
-        tips:['竖抱让头靠在肩上，轻拍背部','也可坐在腿上，托下巴拍背','每次喂奶中间和之后都拍嗝','几分钟拍不出来可换姿势再试'] },
-    temperature: { emoji:'🌡️', reason:'宝宝可能太热或太冷',
-        description:'持续中等强度的烦躁哭声，特征在饥饿和不适之间。MFCC模式不符合明显的饥饿或疼痛，更接近一般性身体不适。',
-        tips:['摸后颈和背部判断冷热（手脚凉是正常的）','穿衣比大人多一层薄的即可','保持室温22-26°C','观察是否出汗或嘴唇发紫'] },
-};
 
 // ================================================================
 // UI Logic
 // ================================================================
-let mediaRecorder = null, audioContext = null, analyser = null, animationId = null;
-let isRecording = false, startTime = 0, timerInterval = null, audioChunks = [], recordHistory = [], stream = null, vizMode = 'wave';
+let mediaRecorder=null,audioContext=null,analyser=null,animationId=null;
+let isRecording=false,startTime=0,timerInterval=null,audioChunks=[],recordHistory=[],stream=null,vizMode='wave';
+let lastResult=null;
 
-function switchViz(mode) {
-    vizMode = mode;
-    document.querySelectorAll('.viz-tab').forEach(t => t.classList.remove('active'));
+function switchViz(mode){
+    vizMode=mode;
+    document.querySelectorAll('.viz-tab').forEach(t=>t.classList.remove('active'));
     event.target.classList.add('active');
-    document.getElementById('visualizer').style.display = mode === 'wave' ? 'block' : 'none';
-    document.getElementById('spectrogram').style.display = mode === 'freq' ? 'block' : 'none';
+    document.getElementById('visualizer').style.display=mode==='wave'?'block':'none';
+    document.getElementById('spectrogram').style.display=mode==='freq'?'block':'none';
 }
-function toggleRecording() { if (isRecording) stopRecording(); else startRecording(); }
+function toggleRecording(){if(isRecording)stopRecording();else startRecording();}
 
-async function startRecording() {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 } });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const src = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
-        mediaRecorder = new MediaRecorder(stream); audioChunks = [];
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-        mediaRecorder.onstop = () => processAudio();
-        mediaRecorder.start(); isRecording = true; startTime = Date.now();
-        const btn = document.getElementById('recordBtn');
-        btn.classList.add('recording'); btn.querySelector('.mic-icon').textContent = '⏹️'; btn.querySelector('.btn-text').textContent = '点击停止';
-        document.getElementById('hint').textContent = '正在录音...请保持安静环境';
+async function startRecording(){
+    try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,sampleRate:44100}});
+        audioContext=new(window.AudioContext||window.webkitAudioContext)();
+        const src=audioContext.createMediaStreamSource(stream);analyser=audioContext.createAnalyser();analyser.fftSize=2048;src.connect(analyser);
+        mediaRecorder=new MediaRecorder(stream);audioChunks=[];
+        mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);};
+        mediaRecorder.onstop=()=>processAudio();
+        mediaRecorder.start();isRecording=true;startTime=Date.now();
+        const btn=document.getElementById('recordBtn');
+        btn.classList.add('recording');btn.querySelector('.mic-icon').textContent='⏹️';btn.querySelector('.btn-text').textContent=T('btnStop');
+        document.getElementById('hint').textContent=T('hintRecording');
         document.getElementById('vizLabel').classList.add('hidden');
         document.getElementById('resultCard').classList.remove('show');
         document.getElementById('analysisProgress').classList.remove('show');
-        timerInterval = setInterval(updateTimer, 100); drawVisualizer();
-        setTimeout(() => { if (isRecording) stopRecording(); }, 15000);
-    } catch (e) { showToast('请允许麦克风权限后重试'); }
+        timerInterval=setInterval(updateTimer,100);drawVisualizer();
+        setTimeout(()=>{if(isRecording)stopRecording();},15000);
+    }catch(e){showToast(T('micError'));}
 }
 
-function stopRecording() {
-    if (!isRecording) return; isRecording = false;
-    mediaRecorder.stop(); stream.getTracks().forEach(t => t.stop());
-    cancelAnimationFrame(animationId); clearInterval(timerInterval);
-    const btn = document.getElementById('recordBtn');
-    btn.classList.remove('recording'); btn.classList.add('analyzing');
-    btn.querySelector('.mic-icon').textContent = '🔬'; btn.querySelector('.btn-text').textContent = '分析中...';
-    document.getElementById('hint').textContent = '神经网络正在分析哭声...';
+function stopRecording(){
+    if(!isRecording)return;isRecording=false;
+    mediaRecorder.stop();stream.getTracks().forEach(t=>t.stop());
+    cancelAnimationFrame(animationId);clearInterval(timerInterval);
+    const btn=document.getElementById('recordBtn');
+    btn.classList.remove('recording');btn.classList.add('analyzing');
+    btn.querySelector('.mic-icon').textContent='🔬';btn.querySelector('.btn-text').textContent=T('btnAnalyzing');
+    document.getElementById('hint').textContent=T('hintAnalyzing');
 }
 
-function updateTimer() {
-    const e = Math.floor((Date.now() - startTime) / 1000);
-    document.getElementById('timer').textContent = `${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;
+function updateTimer(){const e=Math.floor((Date.now()-startTime)/1000);document.getElementById('timer').textContent=`${String(Math.floor(e/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;}
+function drawVisualizer(){if(!analyser)return;animationId=requestAnimationFrame(drawVisualizer);if(vizMode==='wave')drawWave();else drawFreq();}
+function drawWave(){
+    const c=document.getElementById('visualizer'),ctx=c.getContext('2d');c.width=c.offsetWidth*2;c.height=c.offsetHeight*2;ctx.scale(2,2);
+    const buf=analyser.frequencyBinCount,d=new Uint8Array(buf);analyser.getByteTimeDomainData(d);
+    const w=c.offsetWidth,h=c.offsetHeight;ctx.clearRect(0,0,w,h);
+    const g=ctx.createLinearGradient(0,0,w,0);g.addColorStop(0,'#e91e63');g.addColorStop(.5,'#9c27b0');g.addColorStop(1,'#536dfe');
+    ctx.lineWidth=2;ctx.strokeStyle=g;ctx.beginPath();const sw=w/buf;let x=0;
+    for(let i=0;i<buf;i++){const y=d[i]/128*h/2;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);x+=sw;}
+    ctx.lineTo(w,h/2);ctx.stroke();
 }
-function drawVisualizer() { if (!analyser) return; animationId = requestAnimationFrame(drawVisualizer); if (vizMode === 'wave') drawWave(); else drawFreq(); }
-function drawWave() {
-    const c = document.getElementById('visualizer'), ctx = c.getContext('2d');
-    c.width = c.offsetWidth*2; c.height = c.offsetHeight*2; ctx.scale(2,2);
-    const buf = analyser.frequencyBinCount, d = new Uint8Array(buf); analyser.getByteTimeDomainData(d);
-    const w = c.offsetWidth, h = c.offsetHeight; ctx.clearRect(0,0,w,h);
-    const g = ctx.createLinearGradient(0,0,w,0); g.addColorStop(0,'#e91e63'); g.addColorStop(.5,'#9c27b0'); g.addColorStop(1,'#536dfe');
-    ctx.lineWidth=2; ctx.strokeStyle=g; ctx.beginPath();
-    const sw = w/buf; let x=0;
-    for (let i=0; i<buf; i++) { const y = d[i]/128*h/2; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); x+=sw; }
-    ctx.lineTo(w,h/2); ctx.stroke();
-}
-function drawFreq() {
-    const c = document.getElementById('spectrogram'), ctx = c.getContext('2d');
-    c.width = c.offsetWidth*2; c.height = c.offsetHeight*2; ctx.scale(2,2);
-    const buf = analyser.frequencyBinCount, d = new Uint8Array(buf); analyser.getByteFrequencyData(d);
-    const w = c.offsetWidth, h = c.offsetHeight; ctx.clearRect(0,0,w,h);
-    const n=64, bw=w/n-1, step=Math.floor(buf/n);
-    for (let i=0;i<n;i++) { const v=d[i*step]/255, bh=v*h*.9; ctx.fillStyle=`hsla(${300-v*60},80%,55%,.8)`; ctx.fillRect(i*(bw+1),h-bh,bw,bh); }
+function drawFreq(){
+    const c=document.getElementById('spectrogram'),ctx=c.getContext('2d');c.width=c.offsetWidth*2;c.height=c.offsetHeight*2;ctx.scale(2,2);
+    const buf=analyser.frequencyBinCount,d=new Uint8Array(buf);analyser.getByteFrequencyData(d);
+    const w=c.offsetWidth,h=c.offsetHeight;ctx.clearRect(0,0,w,h);
+    const n=64,bw=w/n-1,step=Math.floor(buf/n);
+    for(let i=0;i<n;i++){const v=d[i*step]/255,bh=v*h*.9;ctx.fillStyle=`hsla(${300-v*60},80%,55%,.8)`;ctx.fillRect(i*(bw+1),h-bh,bw,bh);}
 }
 
-async function stepProgress(id, delay) {
-    return new Promise(r => setTimeout(() => {
-        document.querySelectorAll('.progress-step').forEach(s => { if(s.classList.contains('active')){s.classList.remove('active');s.classList.add('done');s.querySelector('.step-icon').textContent='✓';}});
-        document.getElementById(id).classList.add('active'); r();
-    }, delay));
+async function stepProgress(id,delay){
+    return new Promise(r=>setTimeout(()=>{
+        document.querySelectorAll('.progress-step').forEach(s=>{if(s.classList.contains('active')){s.classList.remove('active');s.classList.add('done');s.querySelector('.step-icon').textContent='✓';}});
+        document.getElementById(id).classList.add('active');r();
+    },delay));
 }
 
-async function processAudio() {
-    const elapsed = (Date.now() - startTime) / 1000;
-    if (elapsed < 2) { resetUI(); showToast('录音时间太短，请至少录制3秒'); return; }
-
-    const progress = document.getElementById('analysisProgress');
+async function processAudio(){
+    const elapsed=(Date.now()-startTime)/1000;
+    if(elapsed<2){resetUI();showToast(T('tooShort'));return;}
+    const progress=document.getElementById('analysisProgress');
     progress.classList.add('show');
-    document.querySelectorAll('.progress-step').forEach((s,i) => { s.classList.remove('active','done'); s.querySelector('.step-icon').textContent = (i+1).toString(); });
-
-    try {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        const ab = await blob.arrayBuffer();
-        const dCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const buf = await dCtx.decodeAudioData(ab);
-        const raw = buf.getChannelData(0), sr = buf.sampleRate;
-
-        await stepProgress('step1', 200);
-
-        await stepProgress('step2', 300);
-        const mfcc = new MFCCExtractor(sr).extract(raw);
-
-        await stepProgress('step3', 300);
-        const fe = new FeatureExtractor(raw, sr);
-        const cent = fe.centroid(), roll = fe.rolloff(), energy = fe.energy();
-
-        await stepProgress('step4', 400);
-        const pitch = fe.pitch();
-
-        await stepProgress('step5', 300);
-        const dunstan = new DunstanDetector().detect(pitch, energy, mfcc);
-
-        await stepProgress('step6', 300);
-        const featureVec = extractFeatureVector(mfcc, pitch, energy);
-        const nnResult = await predictWithNN(featureVec);
-
-        // Mark last step done
-        setTimeout(() => {
-            const s6 = document.getElementById('step6');
-            s6.classList.remove('active'); s6.classList.add('done'); s6.querySelector('.step-icon').textContent = '✓';
-        }, 200);
-
-        setTimeout(() => {
-            showResult(nnResult, { pitch, energy, centroid: cent, rolloff: roll, dunstan });
-        }, 500);
-
-    } catch (err) {
-        console.error(err); progress.classList.remove('show');
-        showToast('音频处理出错，请重试');
-        resetUI();
-    }
+    document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');s.querySelector('.step-icon').textContent=(i+1).toString();});
+    try{
+        const blob=new Blob(audioChunks,{type:'audio/webm'});const ab=await blob.arrayBuffer();
+        const dCtx=new(window.AudioContext||window.webkitAudioContext)();const buf=await dCtx.decodeAudioData(ab);
+        const raw=buf.getChannelData(0),sr=buf.sampleRate;
+        await stepProgress('step1',200);
+        await stepProgress('step2',300);const mfcc=new MFCCExtractor(sr).extract(raw);
+        await stepProgress('step3',300);const fe=new FeatureExtractor(raw,sr);const cent=fe.centroid(),roll=fe.rolloff(),energy=fe.energy();
+        await stepProgress('step4',400);const pitch=fe.pitch();
+        await stepProgress('step5',300);const dunstan=new DunstanDetector().detect(pitch,energy,mfcc);
+        await stepProgress('step6',300);const featureVec=extractFeatureVector(mfcc,pitch,energy);const nnResult=await predictWithNN(featureVec);
+        setTimeout(()=>{const s6=document.getElementById('step6');s6.classList.remove('active');s6.classList.add('done');s6.querySelector('.step-icon').textContent='✓';},200);
+        setTimeout(()=>{showResult(nnResult,{pitch,energy,centroid:cent,rolloff:roll,dunstan});},500);
+    }catch(err){console.error(err);progress.classList.remove('show');showToast(T('audioError'));resetUI();}
 }
 
-function showResult(nnResult, features) {
-    const topClass = nnResult[0].name;
-    const topProb = nnResult[0].prob;
-    const info = cryTypes[topClass];
-    if (!info) { resetUI(); return; }
-
-    const confidence = Math.round(topProb * 100);
-
-    document.getElementById('resultEmoji').textContent = info.emoji;
-    document.getElementById('resultReason').textContent = info.reason;
-    document.getElementById('resultConfidence').textContent = `神经网络置信度: ${confidence}%`;
-    document.getElementById('confidenceFill').style.width = `${confidence}%`;
-    document.getElementById('resultDesc').textContent = info.description;
-
-    // Dunstan tag
-    const dt = document.getElementById('dunstanTag');
-    if (features && features.dunstan) {
-        dt.innerHTML = `🗣️ Dunstan: <span class="sound">${features.dunstan.label}</span>`;
-        dt.style.display = 'inline-flex';
-    } else dt.style.display = 'none';
-
-    // NN tag
-    const nt = document.getElementById('nnTag');
-    nt.innerHTML = `🧠 Neural Network: ${confidence}%`;
-    nt.style.display = 'inline-flex';
-
-    // Features
-    if (features) {
-        document.getElementById('featureGrid').innerHTML = `
-            <div class="feature-item"><div class="f-label">基频 (F0)</div><div class="f-value">${features.pitch.mean}<span class="f-unit"> Hz</span></div></div>
-            <div class="feature-item"><div class="f-label">频谱质心</div><div class="f-value">${features.centroid}<span class="f-unit"> Hz</span></div></div>
-            <div class="feature-item"><div class="f-label">音量 (RMS)</div><div class="f-value">${(features.energy.rms*100).toFixed(1)}<span class="f-unit"> %</span></div></div>
-            <div class="feature-item"><div class="f-label">频谱滚降</div><div class="f-value">${features.rolloff}<span class="f-unit"> Hz</span></div></div>
-            <div class="feature-item"><div class="f-label">节奏规律性</div><div class="f-value">${(features.energy.rhythm*100).toFixed(0)}<span class="f-unit"> %</span></div></div>
-            <div class="feature-item"><div class="f-label">音高波动</div><div class="f-value">±${features.pitch.std}<span class="f-unit"> Hz</span></div></div>`;
+function showResult(nnResult,features,isLangSwitch=false){
+    lastResult={nnResult,features};
+    const topClass=nnResult[0].name,topProb=nnResult[0].prob;
+    const info=T('cryTypes')[topClass];if(!info){resetUI();return;}
+    const confidence=Math.round(topProb*100);
+    document.getElementById('resultEmoji').textContent=info.emoji;
+    document.getElementById('resultReason').textContent=info.reason;
+    document.getElementById('resultConfidence').textContent=T('confidence')(confidence);
+    document.getElementById('confidenceFill').style.width=`${confidence}%`;
+    document.getElementById('resultDesc').textContent=info.description;
+    const dt=document.getElementById('dunstanTag');
+    if(features&&features.dunstan){dt.innerHTML=`🗣️ Dunstan: <span class="sound">${features.dunstan.label}</span>`;dt.style.display='inline-flex';}else dt.style.display='none';
+    document.getElementById('nnTag').innerHTML=`🧠 Neural Network: ${confidence}%`;document.getElementById('nnTag').style.display='inline-flex';
+    if(features){
+        document.getElementById('featureGrid').innerHTML=`
+            <div class="feature-item"><div class="f-label">${T('fPitch')}</div><div class="f-value">${features.pitch.mean}<span class="f-unit"> Hz</span></div></div>
+            <div class="feature-item"><div class="f-label">${T('fCentroid')}</div><div class="f-value">${features.centroid}<span class="f-unit"> Hz</span></div></div>
+            <div class="feature-item"><div class="f-label">${T('fRms')}</div><div class="f-value">${(features.energy.rms*100).toFixed(1)}<span class="f-unit"> %</span></div></div>
+            <div class="feature-item"><div class="f-label">${T('fRolloff')}</div><div class="f-value">${features.rolloff}<span class="f-unit"> Hz</span></div></div>
+            <div class="feature-item"><div class="f-label">${T('fRhythm')}</div><div class="f-value">${(features.energy.rhythm*100).toFixed(0)}<span class="f-unit"> %</span></div></div>
+            <div class="feature-item"><div class="f-label">${T('fPitchVar')}</div><div class="f-value">±${features.pitch.std}<span class="f-unit"> Hz</span></div></div>`;
     }
-
-    // NN probability bars
-    const colors = { hungry:'#e91e63', tired:'#9c27b0', pain:'#f44336', diaper:'#ff9800', attention:'#2196f3', colic:'#ff5722', burping:'#00bcd4', temperature:'#4caf50' };
-    const labels = { hungry:'饿了', tired:'困了', pain:'疼痛', diaper:'尿布', attention:'抱抱', colic:'肠绞痛', burping:'拍嗝', temperature:'冷热' };
-    document.getElementById('scoresBars').innerHTML = nnResult.map(r =>
-        `<div class="score-row">
-            <span class="score-label">${labels[r.name]||r.name}</span>
-            <div class="score-bar-bg"><div class="score-bar-fill" style="width:${r.prob*100}%;background:${colors[r.name]||'#999'}"></div></div>
-            <span class="score-val">${(r.prob*100).toFixed(1)}%</span>
-        </div>`
+    const colors={hungry:'#e91e63',tired:'#9c27b0',pain:'#f44336',diaper:'#ff9800',attention:'#2196f3',colic:'#ff5722',burping:'#00bcd4',temperature:'#4caf50'};
+    const labels=T('labels');
+    document.getElementById('scoresBars').innerHTML=nnResult.map(r=>
+        `<div class="score-row"><span class="score-label">${labels[r.name]||r.name}</span><div class="score-bar-bg"><div class="score-bar-fill" style="width:${r.prob*100}%;background:${colors[r.name]||'#999'}"></div></div><span class="score-val">${(r.prob*100).toFixed(1)}%</span></div>`
     ).join('');
-
-    document.getElementById('tipsList').innerHTML = info.tips.map((t,i) =>
-        `<div class="tip-item"><span class="tip-num">${i+1}</span><span>${t}</span></div>`
-    ).join('');
-
+    document.getElementById('tipsList').innerHTML=info.tips.map((t,i)=>`<div class="tip-item"><span class="tip-num">${i+1}</span><span>${t}</span></div>`).join('');
     document.getElementById('resultCard').classList.add('show');
-    document.getElementById('resultCard').scrollIntoView({ behavior:'smooth', block:'nearest' });
-
-    const now = new Date();
-    recordHistory.unshift({ emoji: info.emoji, reason: info.reason, confidence,
-        time: `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}` });
-    updateHistory(); resetUI();
+    if(!isLangSwitch)document.getElementById('resultCard').scrollIntoView({behavior:'smooth',block:'nearest'});
+    if(!isLangSwitch){
+        const now=new Date();
+        recordHistory.unshift({emoji:info.emoji,reasonKey:topClass,confidence,time:`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`});
+    }
+    updateHistory();if(!isLangSwitch)resetUI();
 }
 
-function updateHistory() {
-    if (!recordHistory.length) return;
-    document.getElementById('historySection').style.display = 'block';
-    document.getElementById('historyList').innerHTML = recordHistory.slice(0,5).map(i =>
-        `<div class="history-item"><span class="h-emoji">${i.emoji}</span><div class="h-info"><div class="h-reason">${i.reason} (${i.confidence}%)</div><div class="h-time">${i.time}</div></div></div>`
-    ).join('');
+function updateHistory(){
+    if(!recordHistory.length)return;
+    document.getElementById('historySection').style.display='block';
+    document.getElementById('historyList').innerHTML=recordHistory.slice(0,5).map(i=>{
+        const reason=T('cryTypes')[i.reasonKey]?.reason||i.reasonKey;
+        return`<div class="history-item"><span class="h-emoji">${i.emoji}</span><div class="h-info"><div class="h-reason">${reason} (${i.confidence}%)</div><div class="h-time">${i.time}</div></div></div>`;
+    }).join('');
 }
 
-function resetUI() {
-    const btn = document.getElementById('recordBtn');
-    btn.classList.remove('recording','analyzing'); btn.querySelector('.mic-icon').textContent = '🎙️'; btn.querySelector('.btn-text').textContent = '点击录音';
-    document.getElementById('timer').textContent = '00:00';
-    document.getElementById('hint').textContent = '请将手机靠近宝宝，录制3-10秒哭声';
+function resetUI(){
+    const btn=document.getElementById('recordBtn');
+    btn.classList.remove('recording','analyzing');btn.querySelector('.mic-icon').textContent='🎙️';btn.querySelector('.btn-text').textContent=T('btnRecord');
+    document.getElementById('timer').textContent='00:00';
+    document.getElementById('hint').textContent=T('hintReady');
     document.getElementById('vizLabel').classList.remove('hidden');
-    ['visualizer','spectrogram'].forEach(id => { const c = document.getElementById(id); c.getContext('2d').clearRect(0,0,c.width,c.height); });
+    ['visualizer','spectrogram'].forEach(id=>{const c=document.getElementById(id);c.getContext('2d').clearRect(0,0,c.width,c.height);});
 }
 
-function showToast(msg) {
-    const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
-}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 
 // ================================================================
-// Initialize on page load
+// Init
 // ================================================================
-(async function init() {
-    try {
-        nnModel = await buildAndTrainModel();
-        const statusEl = document.getElementById('modelStatus');
-        statusEl.textContent = '✅ 神经网络已就绪 (3层全连接网络, 8类分类)';
-        statusEl.classList.remove('loading'); statusEl.classList.add('ready');
-        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+(async function init(){
+    // Restore language preference
+    const saved=localStorage.getItem('cw-lang');
+    if(saved&&saved!==currentLang)setLang(saved);
+    applyLang();
 
-        const btn = document.getElementById('recordBtn');
-        btn.disabled = false; btn.querySelector('.btn-text').textContent = '点击录音';
-        document.getElementById('hint').textContent = '请将手机靠近宝宝，录制3-10秒哭声';
-    } catch (e) {
-        console.error('Model init error:', e);
-        document.getElementById('modelStatus').textContent = '⚠️ 模型加载失败，使用基础分析模式';
+    const el=document.getElementById('modelStatus');
+    el.textContent=T('modelInit');
+    try{
+        nnModel=await buildAndTrainModel();
+        modelReady=true;
+        el.textContent=T('modelReady');
+        el.classList.remove('loading');el.classList.add('ready');
+        setTimeout(()=>el.classList.add('hidden'),3000);
+        const btn=document.getElementById('recordBtn');
+        btn.disabled=false;btn.querySelector('.btn-text').textContent=T('btnRecord');
+        document.getElementById('hint').textContent=T('hintReady');
+    }catch(e){
+        console.error('Model init error:',e);
+        el.textContent=T('modelError');
     }
 })();
 </script>
