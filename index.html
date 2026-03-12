@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Crying Words - Baby Cry Translator</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <!-- No external ML library needed - pure JS inference -->
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -566,18 +566,43 @@ class FeatureExtractor {
 // ================================================================
 const CLASS_NAMES=['hungry','tired','pain','diaper','attention','colic','burping','temperature'];
 const NUM_FEATURES=32;
-let nnModel=null,featureMeans=null,featureStds=null;
-// Model is pre-trained — loaded from model/ directory at init
+let nnWeights=null;
+// Pre-trained model weights loaded as plain JSON — pure JS inference, no TF.js needed
 
 function extractFeatureVector(mfcc,pitch,energy){
     const v=[];for(let i=0;i<13;i++)v.push(mfcc.avg[i]||0);for(let i=0;i<13;i++)v.push(mfcc.delta[i]||0);
     v.push(pitch.mean,pitch.std,energy.rms,energy.variation,energy.silenceGaps,energy.rhythm);return v;
 }
 
+// Pure JS neural network forward pass (replaces TensorFlow.js)
+function denseLayer(input,kernel,bias,rows,cols,activation){
+    const out=new Float32Array(cols);
+    for(let j=0;j<cols;j++){
+        let sum=bias[j];
+        for(let i=0;i<rows;i++) sum+=input[i]*kernel[i*cols+j];
+        if(activation==='relu') out[j]=sum>0?sum:0;
+        else out[j]=sum;
+    }
+    return out;
+}
+function softmax(arr){
+    const max=Math.max(...arr);
+    const exp=arr.map(v=>Math.exp(v-max));
+    const sum=exp.reduce((a,b)=>a+b);
+    return exp.map(v=>v/sum);
+}
+
 async function predictWithNN(vec){
-    if(!nnModel)return null;
-    const input=tf.tensor2d([vec]);const norm=input.sub(featureMeans).div(featureStds);const pred=nnModel.predict(norm);
-    const probs=await pred.data();input.dispose();norm.dispose();pred.dispose();
+    if(!nnWeights)return null;
+    const w=nnWeights;
+    // Normalize
+    const norm=vec.map((v,i)=>(v-w.means[i])/w.stds[i]);
+    // Forward pass: 32→128(relu)→64(relu)→32(relu)→8(softmax)
+    const h1=denseLayer(norm,w.d1k,w.d1b,32,128,'relu');
+    const h2=denseLayer(h1,w.d2k,w.d2b,128,64,'relu');
+    const h3=denseLayer(h2,w.d3k,w.d3b,64,32,'relu');
+    const h4=denseLayer(h3,w.d4k,w.d4b,32,8,'linear');
+    const probs=softmax(h4);
     const result=CLASS_NAMES.map((name,i)=>({name,prob:probs[i]}));result.sort((a,b)=>b.prob-a.prob);return result;
 }
 
@@ -759,14 +784,8 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
     const el=document.getElementById('modelStatus');
     el.textContent=T('modelCached');
     try{
-        // Load pre-trained model from static files
-        const [modelResult, statsResp] = await Promise.all([
-            tf.loadLayersModel('model/model.json'),
-            fetch('model/stats.json').then(r=>r.json())
-        ]);
-        nnModel=modelResult;
-        featureMeans=tf.tensor1d(statsResp.means);
-        featureStds=tf.tensor1d(statsResp.stds);
+        // Load pre-trained weights (pure JSON, no TF.js needed)
+        nnWeights=await fetch('model/weights.json').then(r=>r.json());
         modelReady=true;
         el.textContent=T('modelReady');
         el.classList.remove('loading');el.classList.add('ready');
