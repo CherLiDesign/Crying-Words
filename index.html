@@ -285,11 +285,7 @@ const i18n = {
         audioError: 'Audio processing error, please try again',
         micError: 'Please allow microphone access and try again',
 
-        modelInit: '🧠 Initializing neural network model...',
-        modelGenData: '🧠 Generating training data (from research distributions)...',
-        modelBuilding: '🧠 Building neural network (3 layers, 128→64→32)...',
-        modelTraining: '🧠 Training neural network (150 epochs)...',
-        modelEpoch: (e, acc) => `🧠 Training... Epoch ${e}/150 | Accuracy: ${acc}%`,
+        modelCached: '🧠 Loading model...',
         modelReady: '✅ Neural network ready (3-layer FC network, 8-class classifier)',
         modelError: '⚠️ Model failed to load, using basic analysis mode',
 
@@ -357,11 +353,7 @@ const i18n = {
         audioError: '音频处理出错，请重试',
         micError: '请允许麦克风权限后重试',
 
-        modelInit: '🧠 正在初始化神经网络模型...',
-        modelGenData: '🧠 正在生成训练数据 (基于研究论文特征分布)...',
-        modelBuilding: '🧠 正在构建神经网络 (3层, 128→64→32)...',
-        modelTraining: '🧠 正在训练神经网络 (150轮)...',
-        modelEpoch: (e, acc) => `🧠 训练中... 轮次 ${e}/150 | 准确率: ${acc}%`,
+        modelCached: '🧠 正在加载模型...',
         modelReady: '✅ 神经网络已就绪 (3层全连接网络, 8类分类)',
         modelError: '⚠️ 模型加载失败，使用基础分析模式',
 
@@ -575,49 +567,7 @@ class FeatureExtractor {
 const CLASS_NAMES=['hungry','tired','pain','diaper','attention','colic','burping','temperature'];
 const NUM_FEATURES=32;
 let nnModel=null,featureMeans=null,featureStds=null;
-
-const RESEARCH_DISTRIBUTIONS={
-    hungry:{mean:[-5.2,3.1,-1.2,.8,-.5,.3,-.2,.1,-.1,.05,-.03,.02,-.01,.8,.5,.3,.2,.15,.1,.08,.06,.05,.04,.03,.02,.01,380,45,.08,.6,3.5,.55],std:[1.5,1.2,.8,.6,.5,.4,.3,.25,.2,.15,.12,.1,.08,.3,.2,.15,.12,.1,.08,.06,.05,.04,.03,.02,.015,.01,60,20,.03,.2,1.5,.15]},
-    tired:{mean:[-4,2,-.8,.5,-.3,.2,-.15,.08,-.06,.03,-.02,.01,-.005,.5,.3,.2,.12,.08,.06,.05,.04,.03,.025,.02,.015,.008,290,35,.05,.85,5,.3],std:[1.2,1,.7,.5,.4,.3,.25,.2,.15,.12,.1,.08,.06,.2,.15,.12,.08,.06,.05,.04,.03,.025,.02,.015,.01,.007,50,15,.02,.25,2,.12]},
-    pain:{mean:[-6.5,4.5,-1.8,1.2,-.8,.5,-.35,.2,-.15,.08,-.05,.03,-.02,1.2,.8,.5,.35,.25,.18,.12,.09,.07,.05,.04,.03,.02,550,90,.15,.4,1.2,.2],std:[1.8,1.5,1,.8,.6,.45,.35,.28,.22,.18,.14,.11,.09,.4,.3,.22,.18,.14,.1,.08,.06,.05,.04,.03,.02,.015,80,30,.04,.15,.8,.1]},
-    diaper:{mean:[-4.5,2.5,-1,.6,-.4,.25,-.18,.1,-.08,.04,-.025,.015,-.008,.6,.4,.25,.15,.1,.08,.06,.05,.04,.03,.025,.018,.01,340,50,.07,.7,3,.4],std:[1.3,1.1,.75,.55,.42,.35,.28,.22,.18,.14,.11,.09,.07,.25,.18,.13,.1,.08,.06,.05,.04,.03,.02,.018,.012,.008,55,18,.025,.22,1.5,.13]},
-    attention:{mean:[-3.8,2.2,-.7,.45,-.3,.18,-.12,.07,-.05,.03,-.02,.01,-.005,.7,.45,.28,.18,.12,.09,.07,.05,.04,.03,.02,.016,.009,350,55,.06,1.1,5.5,.25],std:[1.2,1,.7,.48,.38,.3,.24,.2,.16,.12,.1,.08,.06,.28,.2,.15,.1,.08,.065,.05,.04,.03,.025,.018,.012,.008,60,22,.022,.3,2,.12]},
-    colic:{mean:[-6.8,4.8,-2,1.3,-.9,.55,-.38,.22,-.16,.09,-.06,.035,-.02,1.1,.7,.45,.3,.22,.16,.11,.08,.065,.05,.038,.028,.018,480,85,.13,.45,1.5,.18],std:[1.7,1.4,.95,.75,.58,.43,.34,.27,.21,.17,.13,.1,.08,.38,.28,.2,.16,.12,.09,.07,.055,.045,.035,.025,.02,.013,75,28,.04,.18,1,.1]},
-    burping:{mean:[-4.8,2.8,-1.1,.7,-.45,.28,-.2,.12,-.09,.05,-.03,.018,-.01,.9,.55,.35,.22,.15,.11,.08,.06,.048,.035,.028,.02,.012,420,60,.09,.75,4,.35],std:[1.4,1.15,.8,.6,.45,.36,.29,.23,.18,.14,.11,.09,.07,.32,.22,.16,.12,.09,.07,.055,.045,.035,.028,.02,.015,.01,65,22,.03,.24,1.8,.14]},
-    temperature:{mean:[-4.3,2.4,-.9,.55,-.38,.22,-.16,.09,-.07,.035,-.022,.013,-.007,.65,.42,.27,.17,.11,.085,.065,.05,.038,.03,.022,.017,.01,360,48,.075,.72,3.2,.42],std:[1.3,1.05,.72,.52,.4,.33,.26,.21,.17,.13,.1,.085,.065,.26,.19,.14,.1,.078,.06,.048,.038,.03,.024,.018,.013,.009,52,17,.024,.22,1.5,.14]}
-};
-
-function gaussRandom(m,s){const u1=Math.random(),u2=Math.random();return m+s*Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);}
-
-function generateTrainingData(n=600){
-    const xs=[],ys=[];
-    CLASS_NAMES.forEach((cls,idx)=>{const d=RESEARCH_DISTRIBUTIONS[cls];for(let i=0;i<n;i++){xs.push(d.mean.map((m,j)=>gaussRandom(m,d.std[j])));const l=new Array(CLASS_NAMES.length).fill(0);l[idx]=1;ys.push(l);}});
-    const idx=xs.map((_,i)=>i);for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
-    return{xs:tf.tensor2d(idx.map(i=>xs[i])),ys:tf.tensor2d(idx.map(i=>ys[i]))};
-}
-
-async function buildAndTrainModel(){
-    const el=document.getElementById('modelStatus');
-    el.textContent=T('modelGenData'); await tf.nextFrame();
-    const{xs,ys}=generateTrainingData(600);
-    featureMeans=xs.mean(0);featureStds=xs.sub(featureMeans).square().mean(0).sqrt().add(1e-8);
-    const xsN=xs.sub(featureMeans).div(featureStds);
-    el.textContent=T('modelBuilding'); await tf.nextFrame();
-    const model=tf.sequential();
-    model.add(tf.layers.dense({inputShape:[NUM_FEATURES],units:128,activation:'relu',kernelRegularizer:tf.regularizers.l2({l2:.001})}));
-    model.add(tf.layers.dropout({rate:.3}));
-    model.add(tf.layers.dense({units:64,activation:'relu',kernelRegularizer:tf.regularizers.l2({l2:.001})}));
-    model.add(tf.layers.dropout({rate:.2}));
-    model.add(tf.layers.dense({units:32,activation:'relu'}));
-    model.add(tf.layers.dense({units:CLASS_NAMES.length,activation:'softmax'}));
-    model.compile({optimizer:tf.train.adam(.001),loss:'categoricalCrossentropy',metrics:['accuracy']});
-    el.textContent=T('modelTraining'); await tf.nextFrame();
-    await model.fit(xsN,ys,{epochs:150,batchSize:64,validationSplit:.15,shuffle:true,callbacks:{
-        onEpochEnd:async(epoch,logs)=>{if(epoch%20===0||epoch===149){el.textContent=T('modelEpoch')(epoch+1,(logs.val_acc*100).toFixed(1));await tf.nextFrame();}}
-    }});
-    xs.dispose();ys.dispose();xsN.dispose();
-    return model;
-}
+// Model is pre-trained — loaded from model/ directory at init
 
 function extractFeatureVector(mfcc,pitch,energy){
     const v=[];for(let i=0;i<13;i++)v.push(mfcc.avg[i]||0);for(let i=0;i<13;i++)v.push(mfcc.delta[i]||0);
@@ -807,9 +757,16 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
     applyLang();
 
     const el=document.getElementById('modelStatus');
-    el.textContent=T('modelInit');
+    el.textContent=T('modelCached');
     try{
-        nnModel=await buildAndTrainModel();
+        // Load pre-trained model from static files
+        const [modelResult, statsResp] = await Promise.all([
+            tf.loadLayersModel('model/model.json'),
+            fetch('model/stats.json').then(r=>r.json())
+        ]);
+        nnModel=modelResult;
+        featureMeans=tf.tensor1d(statsResp.means);
+        featureStds=tf.tensor1d(statsResp.stds);
         modelReady=true;
         el.textContent=T('modelReady');
         el.classList.remove('loading');el.classList.add('ready');
@@ -818,7 +775,7 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
         btn.disabled=false;btn.querySelector('.btn-text').textContent=T('btnRecord');
         document.getElementById('hint').textContent=T('hintReady');
     }catch(e){
-        console.error('Model init error:',e);
+        console.error('Model load error:',e);
         el.textContent=T('modelError');
     }
 })();
